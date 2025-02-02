@@ -12,6 +12,8 @@ from seleniumbase import SB
 os.environ['PYVIRTUALDISPLAY_DISPLAYFD'] = '0'
 # os.environ['DISPLAY'] = "0"
 from pyvirtualdisplay import Display
+
+DATE_FORMAT = "%Y%m%dT%H%M%S"
     
     
 def fetch_main_page(url):
@@ -34,49 +36,7 @@ def fetch_main_page(url):
 
     return links
 
-def parse_construction_page(source_text):
-    """Parses a single construction page to extract dates, stations, and descriptions."""
-    soup = BeautifulSoup(source_text, 'html.parser')
-
-    # Extracting details (adjust these selectors based on the RATP page structure)
-    details = {
-        'dates': None,
-        'stations': None,
-        'description': []
-    }
-    
-    if "pas de travaux" in soup.find('div', class_='article__accroche-content').text:
-        return None
-    
-
-    # Example parsing logic:
-    text = " ".join(soup.find("div",class_="article-content").get_text(strip=True).split("Pour adapter au mieux votre trajet")[:-1])
-    prompt = (
-        "Extrait les données des travaux qui vont avoir lieu sur la ligne de métro Parisien. L'objectif est de créer un fichier ics par type de travaux. "
-        "Je veux donc en output une liste et avec chaque élément : le nom de l'événement, la date et heure de début, date et heure de fin, l'éventuelle récurrence si c'est pertinent."
-        "Le format doit être un json pour être lisible en Python, je vais parser avec la librairie iCalendar."
-        "Exemple d'input :"
-        """
-            "En raison de travaux de renouvellement des appareils de voie, la ligne 3 du métro sera fermée, entre les stations Pont de Levallois-Bécon et Wagram, du 15 au 20 février 2025 inclus.
-            Un service de bus de remplacement sera à votre disposition entre le terminus de Pont de Levallois-Bécon et la station Wagram, aux mêmes horaires que le métro."
-        """
-        "Output :"
-        """
-        ```json
-        [{"date_debut": "2025-02-15 00:00:00", au format "%Y-%m-%d %H:%M:00"
-        "date_fin": "2025-02-20 00:00:00",
-        "summary":"Ligne 3 - Travaux entre Pont de Levallois-Bécon et Wagram",
-        "stations":"Entre Pont de Levallois-Bécon et Wagram"}
-        ]
-        ```
-        """
-        f"Le text à parser est le suivant : {text}"
-        )
-        # """
-        # "S'il faut une récurrence, ça doit être sous le format "
-        # """
-        # "rrule":{"freq":"weekly/daily","count":10}
-    
+def get_llm_json_response(prompt):
     response = requests.post(
         "https://api.mistral.ai/v1/chat/completions",
         headers={
@@ -92,8 +52,63 @@ def parse_construction_page(source_text):
 
     response_dict = json.loads(response.text)
     response_dict = response_dict["choices"][0]["message"]["content"]
-    details = json.loads(response_dict.split("```")[1][4:])
+    try:
+        details = json.loads(response_dict.split("```")[1][4:])
+    except json.decoder.JSONDecodeError as e:
+        raise json.decoder.JSONDecodeError
+    return details
+
+def parse_construction_page(source_text):
+    """Parses a single construction page to extract dates, stations, and descriptions."""
+    soup = BeautifulSoup(source_text, 'html.parser')
+
+    if "pas de travaux" in soup.find('div', class_='article__accroche-content').text:
+        return None
     
+
+    # Example parsing logic:
+    text = " ".join(soup.find("div",class_="article-content").get_text(strip=True).split("Pour adapter au mieux votre trajet")[:-1])
+    prompt = (
+        "Extrait les données des travaux qui vont avoir lieu sur la ligne de métro Parisien. L'objectif est de créer un fichier ics par type de travaux. "
+        "Je veux donc en output une liste et avec chaque élément : le nom de l'événement, la date et heure de début, date et heure de fin, l'éventuelle récurrence si c'est pertinent."
+        "Le format doit être un json pour être lisible en Python, je vais parser avec la librairie iCalendar."
+        "S'il faut une récurrence, ça doit être avec la syntaxe RRULE de iCalendar 4.8.5. Les clés que peut avoir ce dictionnaire sont donc freq, interval, count"
+        f"Les dates doivent être au format {DATE_FORMAT}"
+        "Exemple d'input :"
+        """
+            "En raison de travaux de renouvellement des appareils de voie, la ligne 3 du métro sera fermée, entre les stations Pont de Levallois-Bécon et Wagram, du 15 au 20 février 2025 inclus entre 22h et 6h.
+            Un service de bus de remplacement sera à votre disposition entre le terminus de Pont de Levallois-Bécon et la station Wagram, aux mêmes horaires que le métro."
+        """
+        "Output :"
+        """
+        ```json
+        [{"date_debut": "20250215T220000",
+        "date_fin": "20250220T060000",
+        "summary":"Ligne 3 - Travaux entre Pont de Levallois-Bécon et Wagram",
+        "stations":"Entre Pont de Levallois-Bécon et Wagram"}
+        "rrule":{"freq":"weekly","count":10}
+        ]
+        ```
+        """
+        f"Le text à parser est le suivant : {text}"
+        )
+    max_retries = 3
+    attempts = 0
+    success = False
+
+    while not success and attempts < max_retries:
+        try:
+            details = get_llm_json_response(prompt)
+            success = True
+        except json.decoder.JSONDecodeError as e:
+            attempts += 1
+            print(f'Attempt {attempts}: {e}')
+            # Log error or take corrective measures
+
+    if success:
+        print('Operation succeeded!')
+    else:
+        print('All attempts failed.')
     return details
 
 def create_ics_file(construction_details, output_folder,filename):
@@ -108,14 +123,16 @@ def create_ics_file(construction_details, output_folder,filename):
     c.add("prodid","-//Test RATP travaux//FR")         # Date the event was created (required)
     c.add("version","2.0")         # Date the event was created (required)
     e.add("summary",construction_details["summary"])
-    e.add("dtstart",datetime.strptime(construction_details["date_debut"],"%Y-%m-%d %H:%M:%S"))
-    e.add("dtend",datetime.strptime(construction_details["date_fin"],"%Y-%m-%d %H:%M:%S"))
+    e.add("dtstart",datetime.strptime(construction_details["date_debut"],DATE_FORMAT))
+    e.add("dtend",datetime.strptime(construction_details["date_fin"],DATE_FORMAT))
     # e.description = f"Stations affected: {construction_details['stations']}"
     e.add("uid","12ef27g3eef92g370d")          # Unique identifier (required)
     e.add("dtstamp",datetime.now()  )         # Date the event was created (required)
+    e.add("vtimezone","Europe/Paris")
     
     if "rrule" in construction_details.keys():
-        e.add('rrule', {'freq': 'daily'})
+        pass # TODO:
+        # e.add('rrule', {'freq': 'daily'})
 
     c.add_component(e)
 
@@ -123,6 +140,18 @@ def create_ics_file(construction_details, output_folder,filename):
     filename = os.path.join(output_folder, f"{filename}.ics")
     with open(filename, 'wb') as f:
         f.write(c.to_ical())
+
+def create_google_event(construction_details):
+    """
+    https://support.google.com/calendar/thread/81344786/how-do-i-generate-add-to-calendar-link-from-our-own-website?hl=en
+    """
+    title = construction_details["summary"].replace(' ','+')
+    #&details=text
+    url = f"https://calendar.google.com/calendar/render?action=TEMPLATE&text={title}&dates={construction_details['date_debut']}/{construction_details['date_fin']}&ctz=Europe/Paris"
+    if "rrule" in construction_details.keys():
+        pass # TODO:
+        # url += "&recur=RRULE:FREQ%3DWEEKLY"
+    return url
 
 if __name__ == "__main__":
     links = {i:f"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/metro-ligne-{i}-travaux" for i in range(1, 15)}
@@ -165,6 +194,7 @@ if __name__ == "__main__":
                 output_folder = "ics_files"
                 for j,construction_details in enumerate(details):
                     create_ics_file(construction_details, output_folder, f"event_ligne_{i}_{j}")
+                    google_link = create_google_event(construction_details)
 
                 # print(f"ICS files created in folder: {output_folder}")
 
