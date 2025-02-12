@@ -48,6 +48,7 @@ def parse_construction_page(source_text):
         "S'il faut une récurrence, ça doit être avec la syntaxe RRULE de iCalendar 4.8.5. Les clés que peut avoir ce dictionnaire sont donc freq, interval, count"
         f"Les dates doivent être au format {DATE_FORMAT}. "
         "Fais attention si c'est indiqué une date incluse ou excluse."
+        "L'output json doit être dans la bonne syntaxe. "
         "Exemple d'input :"
         """
             "En raison de travaux de renouvellement des appareils de voie, la ligne 3 du métro sera fermée, entre les stations Pont de Levallois-Bécon et Wagram, du 15 au 20 février 2025 inclus entre 22h et 6h.
@@ -131,7 +132,7 @@ def create_google_event(construction_details) -> str:
 def main() -> None:
     data = {i:{"link":f"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/metro-ligne-{i}-travaux"} for i in range(1, 15)}
     print(f"Found {len(data)} construction detail links. ")
-
+    no_work = []
     
     # URL of the main RATP page
     with  Display(visible=1, size=(1440, 1880)) as display:
@@ -168,8 +169,11 @@ def main() -> None:
                     for j,construction_details in enumerate(details):
                         create_ics_file(construction_details, output_folder, f"event_ligne_{construction_details['summary']}")
                         details[j]["google_calendar"] = create_google_event(construction_details)
-                data[i] = details
-                    # print(f"ICS files created in folder: {output_folder}")
+                    data[i]["construction_list"] = details
+                else:
+                    no_work.append(i)
+            
+            data = {k:v for k,v in data.items() if k not in no_work}
     with open("data/data.json", "w") as f:
         json.dump(data,f)
     print("Finished")
