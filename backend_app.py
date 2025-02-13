@@ -6,7 +6,7 @@ import os
 import json
 from dotenv import load_dotenv
 from litellm import completion
-import os
+import uuid
 
 load_dotenv()
 
@@ -47,8 +47,10 @@ def parse_construction_page(source_text):
         f"Les dates doivent être au format {DATE_FORMAT}. "
         "Fais attention si c'est indiqué une date incluse ou excluse."
         "L'output json doit absolument être dans la bonne syntaxe. "
-        "S'il faut une récurrence, ça doit être avec la syntaxe RRULE de iCalendar 4.8.5. Les clés que peut avoir ce dictionnaire sont donc FREQ, <INTERVAL ou BYDAY>, <COUNT ou UNTIL>. "
-        "Les valeurs de BYDAY possibles sont : SU,MO,TU,WE,TH,FR,SA. INTERVAL permet de sauter tous les X jours, mais a priori on en aurait pas besoin. Et on aurait plutôt besoin de UNTIL que de COUNT. "
+        "S'il faut une récurrence, ça doit être avec la syntaxe RRULE de iCalendar 4.8.5. Les clés que peut avoir ce dictionnaire sont donc <FREQ=daily|weekly>, <BYDAY=SU,MO,TU,WE,TH,FR,SA sans espaces>, <INTERVAL=integer>, <UNTIL=datetime>. "
+        "INTERVAL peut être nécessaire s'il y a des travaux toutes les X semaines par exemple. Mais si la fréquence n'est pas régulière, il faut séparer en deux events, un avec un rrule, un sans."
+        "Pour les stations, si c'est une liste de station, alors sépare par une virgule ','. Si c'est entre 2 stations, sépare par un pipe |. "
+        "Pour le champ summary, ça va être utilisé pour créer le fichier ics, donc il ne faut pas des caractères incompatibles avec un nom de fichier, genre / ou |. "
         """Voici des examples en anglais pour les RRULEs : 
         Daily for 10 occurrences => RRULE:FREQ=DAILY;COUNT=10
         Daily until December 24, 1997 =>  RRULE:FREQ=DAILY;UNTIL=19971224T000000Z
@@ -56,7 +58,7 @@ def parse_construction_page(source_text):
         Weekly until December 24, 1997 => RRULE:FREQ=WEEKLY;UNTIL=19971224T000000Z
         Weekly on Tuesday and Thursday for five weeks => RRULE:FREQ=WEEKLY;UNTIL=19971007T000000Z;WKST=SU;BYDAY=TU,TH
         """
-        "Il vaut mieux utiliser une RRULE si possible que plusieurs éléments dans la liste, pour optimiser le traitement et réduire au mieux le nombre de fichiers. "
+        "Il vaut mieux utiliser une RRULE et des plages de date si possible que plusieurs éléments dans la liste, pour optimiser le traitement et réduire au mieux le nombre de fichiers. "
         
         "Exemple 1 d'input :"
         """
@@ -69,7 +71,7 @@ def parse_construction_page(source_text):
         [{"date_debut": "20250215T220000",
         "date_fin": "20250220T060000",
         "summary":"Ligne 3 - Travaux entre Pont de Levallois-Bécon et Wagram",
-        "stations":"Entre Pont de Levallois-Bécon et Wagram"}
+        "stations":"Pont de Levallois-Bécon | Wagram"}
         "rrule":{"freq":"weekly","count":10} 
         ]
         ```
@@ -85,8 +87,28 @@ def parse_construction_page(source_text):
         [{"date_debut": "20250215T220000",
         "date_fin": "20250220T060000",
         "summary":"Ligne 3 - Travaux entre Pont de Levallois-Bécon et Wagram",
-        "stations":"Entre Pont de Levallois-Bécon et Wagram"}
+        "stations":"Pont de Levallois-Bécon | Wagram"}
         "rrule":{"freq":"weekly","count":10}
+        ]
+        ```
+        """
+        
+        "Exemple 3 d'input :"
+        """
+            "En raison de travaux de renouvellement des appareils de voie, les 12, 13 avril et 18 mai 2025 : la ligne 6 sera fermée entre les stations Daumesnil et Nation ;.
+        """
+        "Attention : on peut optimiser et mettre le 12 et 13 dans un seul évent avec plage de date étendue, et le 18 de manière séparée! Donc Output avec 2 éléments et non 3 dans la liste:"
+        """
+        ```json
+        [
+            {"date_debut": "20250412T000000",
+            "date_fin": "20250413T230000",
+            "summary":"Ligne 6 - Travaux entre Daumesnil et Nation",
+            "stations":"Daumesnil | Nation"
+            {"date_debut": "20250518T000000",
+            "date_fin": "20250519T000000",
+            "summary":"Ligne 6 - Travaux entre Daumesnil et Nation",
+            "stations":"Daumesnil | Nation"
         ]
         ```
         """
@@ -112,6 +134,8 @@ def parse_construction_page(source_text):
             # Log error or take corrective measures
 
     if success:
+        for i in range(len(details)):
+            details[i]["summary"] = details[i]["summary"].replace("/","-")
         print('Operation succeeded!')
     else:
         print('All attempts failed.')
@@ -131,15 +155,19 @@ def create_ics_file(construction_details, output_folder,filename) -> None:
     c.add("version","2.0")         # Date the event was created (required)
     e.add("summary",construction_details["summary"])
     e.add("dtstart",datetime.strptime(construction_details["date_debut"],DATE_FORMAT))
-    e.add("dtend",datetime.strptime(construction_details["date_fin"],DATE_FORMAT))
     # e.description = f"Stations affected: {construction_details['stations']}"
-    e.add("uid","12ef27g3eef92g370d")          # Unique identifier (required)
+    e.add("uid",uuid.uuid4())          # Unique identifier (required)
     e.add("dtstamp",datetime.now()  )         # Date the event was created (required)
     e.add("vtimezone","Europe/Paris")
     
     if "rrule" in construction_details.keys(): 
-        e.add('rrule', {'freq': 'daily'})
-        # pass # TODO:
+        construction_details["rrule"] = construction_details["rrule"].replace(" ","") 
+        rule = construction_details["rrule"].copy()
+        rule["byday"] = rule["byday"].split(",") 
+        rule["until"]=datetime.strptime(rule["until"],DATE_FORMAT)
+        e.add('rrule', rule)
+    else:
+        e.add("dtend",datetime.strptime(construction_details["date_fin"],DATE_FORMAT))
 
     c.add_component(e)
 
@@ -156,24 +184,30 @@ def create_google_event(construction_details) -> str:
     #&details=text
     url = f"https://calendar.google.com/calendar/render?action=TEMPLATE&text={title}&dates={construction_details['date_debut']}/{construction_details['date_fin']}&ctz=Europe/Paris"
     if "rrule" in construction_details.keys():
-        url += "&recur=RRULE:FREQ%3DWEEKLY"
-        # pass # TODO:
+        rule = construction_details["rrule"]
+        url += f"&recur=RRULE:FREQ%3D{rule['freq'].upper()};BYDAY={rule['byday'].upper()};UNTIL%3D{rule['until']}"
+        if "interval" in rule:
+            url+= f";INTERVAL%3D{rule['interval']}"
     return url
 
 def main() -> None:
+    # data = {}
     data = {i:{"link":f"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/metro-ligne-{i}-travaux"} for i in range(1, 15)}
+    data["A"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-a-travaux"}
+    data["B"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-b-travaux"}
+    
+    # TODO: prendre de cette page  https://www.bonjour-ratp.fr/actualites/articles/bulletin-travaux-14fev/
     print(f"Found {len(data)} construction detail links. ")
-    no_work = []
     
     # URL of the main RATP page
     with  Display(visible=1, size=(1440, 1880)) as display:
         # Use SeleniumBase with UC mode and headless mode (Xvfb for virtual display)
         with SB(uc=True, xvfb=True) as sb:
-            for i,line in data.items():
-                sb.uc_open(line["link"])
+            for i,(line_name,line_info) in enumerate(data.items()):
+                sb.uc_open(line_info["link"])
 
                 # Handle the cookie banner
-                if i==1:
+                if i==0:
                     try:
                         sb.wait_for_element('button[id="popin_tc_privacy_button"]', timeout=2)
                         sb.uc_click('button[id="popin_tc_privacy_button"]')
@@ -184,7 +218,7 @@ def main() -> None:
                 # Ensure the page is fully loaded
                 try:
                     sb.wait_for_element("body", timeout=10)
-                    print(f"Page for line {i} loaded successfully. ")
+                    print(f"Page for line {line_name} loaded successfully. ")
                 except Exception as e:
                     print("Failed to load the main page:", str(e))
 
@@ -198,13 +232,16 @@ def main() -> None:
                     # print("Creating ICS files... ")
                     output_folder = "data"
                     for j,construction_details in enumerate(details):
-                        create_ics_file(construction_details, output_folder, f"event_ligne_{construction_details['summary']}")
-                        details[j]["google_calendar"] = create_google_event(construction_details)
-                    data[i]["construction_list"] = details
-                else:
-                    no_work.append(i)
+                        try:
+                            create_ics_file(construction_details, output_folder, f"event_ligne_{construction_details['summary']}")
+                            details[j]["google_calendar"] = create_google_event(construction_details)
+                        except:
+                            print("L'event n'a pas pu être créé! Syntaxe incorrecte")
+                    data[line_name]["construction_list"] = details
+                # else:
+                #     no_work.append(i)
             
-            data = {k:v for k,v in data.items() if k not in no_work}
+            data = {k:v for k,v in data.items() if "construction_list" in v.keys()}
     with open("data/data2.json", "w") as f:
         json.dump(data,f)
     print("Finished")
