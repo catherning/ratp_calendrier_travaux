@@ -51,6 +51,7 @@ def parse_construction_page(source_text):
         "INTERVAL peut être nécessaire s'il y a des travaux toutes les X semaines par exemple. Mais si la fréquence n'est pas régulière, il faut séparer en deux events, un avec un rrule, un sans."
         "Pour les stations, si c'est une liste de station, alors sépare par une virgule ','. Si c'est entre 2 stations, sépare par un pipe |. "
         "Pour le champ summary, ça va être utilisé pour créer le fichier ics, donc il ne faut pas des caractères incompatibles avec un nom de fichier, genre / ou |. "
+        "Si le texte indique qu'il n'y a pas de travaux, retourne un json avec liste vide. "
         """Voici des examples en anglais pour les RRULEs : 
         Daily for 10 occurrences => RRULE:FREQ=DAILY;COUNT=10
         Daily until December 24, 1997 =>  RRULE:FREQ=DAILY;UNTIL=19971224T000000Z
@@ -161,7 +162,7 @@ def create_ics_file(construction_details, output_folder,filename) -> None:
     e.add("vtimezone","Europe/Paris")
     
     if "rrule" in construction_details.keys(): 
-        construction_details["rrule"] = construction_details["rrule"].replace(" ","") 
+        construction_details["rrule"]["byday"] = construction_details["rrule"]["byday"].replace(" ","") 
         rule = construction_details["rrule"].copy()
         rule["byday"] = rule["byday"].split(",") 
         rule["until"]=datetime.strptime(rule["until"],DATE_FORMAT)
@@ -233,7 +234,7 @@ def main() -> None:
                     output_folder = "data"
                     for j,construction_details in enumerate(details):
                         try:
-                            create_ics_file(construction_details, output_folder, f"event_ligne_{construction_details['summary']}")
+                            create_ics_file(construction_details, output_folder, f"event_ligne_{construction_details['summary']}_{j+1}")
                             details[j]["google_calendar"] = create_google_event(construction_details)
                         except:
                             print("L'event n'a pas pu être créé! Syntaxe incorrecte")
