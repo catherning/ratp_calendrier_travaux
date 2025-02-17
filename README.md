@@ -4,13 +4,14 @@ This project is designed to scrape construction details for the Paris metro syst
 
 ## Project Structure
 
+- **pyproject.lock**: Lists the dependencies required for the project, including Streamlit, BeautifulSoup, and any other libraries used in `backend_app.py` and `streamlit_app.py`.
+
 - **backend_app.py**: Contains the main logic for scraping construction details, creating ICS files, and generating Google Calendar URLs. It includes functions for parsing HTML, creating ICS files, and handling the main execution flow.
   
 - **streamlit_app.py**: The entry point for the Streamlit application. It loads the data from `data/data.json`, displays the construction details, provides download links for the ICS files, and includes buttons for Google Calendar URLs.
   
 - **data/data.json**: Stores the construction details in JSON format, including event summaries, start and end dates, and Google Calendar URLs.
   
-- **requirements.txt**: Lists the dependencies required for the project, including Streamlit, BeautifulSoup, and any other libraries used in `backend_app.py`.
 
 ## Setup Instructions
 
@@ -46,6 +47,7 @@ Feel free to submit issues or pull requests for improvements or bug fixes.
 
 # TODO
 - Add RER / Transilien lines
+- Add Second LLM to check first LLM response is ok ?
 - Add filtering to find the relevant construction work depending on the station (then on a travel plan)
-- Add rrule
+- Add rrule => Ok
 - Add cron to update the folder with data regularly ?
