@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime
 from streamlit_calendar import calendar
-import streamlit.components.v1 as components
+# import streamlit.components.v1 as components
 
 # Load data from data.json
 data_file_path = os.path.join("data", "data.json")

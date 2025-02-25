@@ -1709,6 +1709,7 @@ dependencies = [
     { name = "requests" },
     { name = "seleniumbase" },
     { name = "streamlit" },
+    { name = "streamlit-calendar" },
 ]
 
 [package.metadata]
@@ -1723,6 +1724,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.3" },
     { name = "seleniumbase", specifier = ">=4.34.1" },
     { name = "streamlit", specifier = ">=1.42.0" },
+    { name = "streamlit-calendar", specifier = ">=1.2.1" },
 ]
 
 [[package]]
@@ -2053,6 +2055,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/0e/61/a59da06a2822b265fc6230650a1ec4b9203da76ee9cf023083752debf9fa/streamlit-1.42.0.tar.gz", hash = "sha256:8c48494ccfad33e7d0bc5873151800b203cb71203bfd42bc7418940710ca4970", size = 9169261 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ad/dc/69068179e09488d0833a970d06e8bf40e35669a7bddb8a3caadc13b7dff4/streamlit-1.42.0-py2.py3-none-any.whl", hash = "sha256:edf333fd3525b7c64b19e1156b483a1a93cbdb09a3a06f26478388d68f971090", size = 9560180 },
+]
+
+[[package]]
+name = "streamlit-calendar"
+version = "1.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "streamlit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2e/1d/5ded5661352042a9b23d7ba5d6e92683a828da2950ffbcc5f4ef6e6b0968/streamlit_calendar-1.2.1.tar.gz", hash = "sha256:3e23cf701ce49f95ac9846ce624d26dec0a5759f6e9992932579c4a433ea200d", size = 1262038 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/99/14/2aa71e5b3ec870eda05c06a8aa6056eee2d04722cd2fee2751220a7a2504/streamlit_calendar-1.2.1-py3-none-any.whl", hash = "sha256:6a76799412872766ffb51c1a8e3ed58326593331caf373d8536d75560fdf1cd6", size = 1274475 },
 ]
 
 [[package]]
