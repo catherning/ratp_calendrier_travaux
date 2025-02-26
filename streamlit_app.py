@@ -5,8 +5,10 @@ from datetime import datetime
 from streamlit_calendar import calendar
 # import streamlit.components.v1 as components
 
-# Load data from data.json
-data_file_path = os.path.join("data", "data.json")
+st.set_page_config(
+    page_title="Travaux RATP",
+    layout="wide",
+)
 
 LINE_INFO = {
     "1": {"logo":"https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Paris_transit_icons_-_M%C3%A9tro_1.svg/2048px-Paris_transit_icons_-_M%C3%A9tro_1.svg.png","couleur":  "#FFCE00"},
@@ -30,9 +32,11 @@ LINE_INFO = {
 }
 
 NUM_COLS = 1
-first = True
-calendar_events = []
-resources = []
+FIRST = True
+
+data_file_path = os.path.join("data", "data.json")
+
+
 def create_st_calendar(calendar_events,resources):
     calendar_options = {
         "editable": False,
@@ -68,96 +72,133 @@ def create_st_calendar(calendar_events,resources):
         )
     return cal
 
-# def scroll(element_id):
-#     scroll_code = f"""
-#         <script>
-#             var element = window.parent.document.getElementById("{element_id}");
-#             element.scrollIntoView({{behavior: 'smooth'}});
-#         </script>
-#     """.format(element_id)
-#     return scroll_code
-
-with open(data_file_path, "r") as f:
-    data = json.load(f)
-
-st.title("Calendrier des travaux RATP")
-
-with st.sidebar:
-    st.text("Cette page présente les prochains travaux qui auront lieu sur les différentes lignes du métro/RER parisien.")
-    st.markdown("**Des boutons sont disponibles pour récupérer les dates de travaux sous forme d'événements Outlook ou Google Calendar à ajouter dans votre calendrier.**")
 
 # Display construction details by line
-for line, line_details in data.items():
-    construction_details = line_details["construction_list"]
-    num_columns = len(construction_details)
+def show_dl_buttons(line, construction_id, construction_summary,google_link,additional_key=""):
+    button_cols = st.columns([1,5])  # Create two columns for the buttons
+    with button_cols[0]:
+        ics_filename = f"event_ligne_{construction_summary}_{construction_id+1}.ics"
+        ics_file_path = os.path.join("data", ics_filename)
+        if os.path.exists(ics_file_path):
+            with open(ics_file_path, "rb") as ics_file:
+                st.download_button(
+                                label="![Outlook](https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/Microsoft_Office_Outlook_%282018%E2%80%93present%29.svg/826px-Microsoft_Office_Outlook_%282018%E2%80%93present%29.svg.png) Ajouter à Outlook",
+                                data=ics_file,
+                                file_name=ics_filename,
+                                mime="text/calendar",
+                                key=f"ics_{line}_{construction_summary}_{construction_id}" + additional_key
+                            )
 
-    if construction_details:
-        placeholder = st.container()
-        col1, col2, col3 = placeholder.columns([1, 12,5])
-        with col1:
-            st.image(LINE_INFO[line]["logo"])
-        with col2:
-            st.header(f"Ligne {line}",anchor=line)
-        with col3:
-            st.link_button("Page de référence RATP", line_details["link"],type="tertiary")
-        
-        travaux_unique_name = set()
-        count_finished = 0
-        
-        with st.expander("Détails des travaux", expanded=first,):
-            for i, construction in enumerate(construction_details):
-                
-                
-                date_fin = datetime.strptime(construction['date_fin'], '%Y%m%dT%H%M%S')
-                if date_fin<datetime.now():
-                    count_finished+=1
-                    continue
-                else:
-                    first=False
+    with button_cols[1]:
+        if google_link:
+            st.link_button("![Google](https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Google_Calendar_icon_%282020%29.svg/2048px-Google_Calendar_icon_%282020%29.svg.png) Ajouter à Google Calendar", google_link)
 
-                name = construction["summary"].split(" - ")[1]
-                if name not in travaux_unique_name: 
-                    st.subheader(name)
-                    travaux_unique_name.add(name)
-                    resources.append({"id": name, "line": f"Ligne {line}", "title": name})
+def create_streamlit_calendar_event(LINE_INFO, calendar_events, resources, line, travaux_unique_name, construction,construction_id):
+    name = construction["summary"].split(" - ")[1]
+    if name not in travaux_unique_name: 
+        st.subheader(name)
+        travaux_unique_name.add(name)
+        resources.append({"id": name, "line": f"Ligne {line}", "title": name})
                     
-                calendar_events.append(
+    calendar_events.append(
                             {
                         "title": construction["summary"],
                         "start": construction["date_debut"],
                         "end": construction["date_fin"],
-                        "line":line,
                         "resourceId": name,
                         "backgroundColor":LINE_INFO[line]["couleur"],
-                        "borderColor":LINE_INFO[line]["couleur"]
+                        "borderColor":LINE_INFO[line]["couleur"],
+                        "line":line,
+                        "construction_id":construction_id,
+                        "google_calendar":construction.get("google_calendar"),
                     },
                 )
-                
-                st.write(construction["date_text"])
-                
-                # Download ICS file and Google Calendar link in same row
-                button_cols = st.columns([2,5])  # Create two columns for the buttons
-                with button_cols[0]:
-                    ics_filename = f"event_ligne_{construction['summary']}_{i+1}.ics"
-                    ics_file_path = os.path.join("data", ics_filename)
-                    if os.path.exists(ics_file_path):
-                        with open(ics_file_path, "rb") as ics_file:
-                            st.download_button(
-                                label="Ajouter à Outlook",
-                                data=ics_file,
-                                file_name=ics_filename,
-                                mime="text/calendar",
-                                key=f"ics_{line}_{construction['summary']}_{i}"
-                            )
 
-                with button_cols[1]:
-                    google_calendar_url = construction.get("google_calendar")
-                    if google_calendar_url:
-                        st.link_button("Ajouter à Google Calendar", google_calendar_url)
+def create_line_header(LINE_INFO, line, line_details):
+    placeholder = st.container()
+    col1, col2, col3 = placeholder.columns([1, 12,5],vertical_alignment="center")
+    with col1:
+        st.image(LINE_INFO[line]["logo"])
+    with col2:
+        st.header(f"Ligne {line}",anchor=line)
+    with col3:
+        st.link_button("Page de référence RATP", line_details["link"],type="tertiary")
+    return placeholder
 
-            if count_finished==len(construction_details):
-                placeholder.text("Pas de travaux futurs identifiés.")
+def main():
 
-cal_event = create_st_calendar(calendar_events,resources)
-# if cal_event and cal_event["callback"] =="eventClick":
-#     components.html(scroll(cal_event["eventClick"]["event"]["extendedProps"]["line"]))
+    with open(data_file_path, "r") as f:
+        data = json.load(f)
+
+    if 'expand_all' not in st.session_state:
+        st.session_state.expand_all = False
+
+    col1, col2 = st.columns([0.7,0.3],vertical_alignment="bottom")
+    with col1:      
+        st.title("Calendrier des travaux RATP")
+    with col2:
+        # Button to toggle expand all state
+        if st.button("Tout développer / Tout réduire"):
+            st.session_state.expand_all = not st.session_state.expand_all
+
+
+    with st.sidebar:
+        st.header("Présentation")
+        st.text("Cette page présente les prochains travaux qui auront lieu sur les différentes lignes du métro/RER (A et B uniquement) parisien.")
+        st.markdown("**Des boutons sont disponibles pour récupérer les dates de travaux sous forme d'événements Outlook ou Google Calendar à ajouter dans votre calendrier. Vous pouvez également cliquer sur un événement du calendrier pour retrouver ces boutons.**")
+        st.warning("Les informations des événements sont partiellement générées par l'IA MistralAI  et peuvent contenir des inexactitudes. Veuillez vérifier les détails auprès des sources officielles de la RATP. "
+                   "Cette application n'est pas affiliée à la RATP ou la SNCF, ni soutenues par elles. Il s'agit d'un projet indépendant qui fournit des informations sur les travaux de construction de la RATP"
+                   )
+        st.markdown("*Date de dernière mise à jour des données: 18/02/2025*")
+    
+    calendar_events = []
+    resources = []
+    for line, line_details in data.items():
+        construction_details = line_details["construction_list"]
+        
+        # Check if there are any future construction details
+        future_events_exist = False
+        for construction in construction_details:
+            date_fin = datetime.strptime(construction['date_fin'], '%Y%m%dT%H%M%S')
+            if date_fin >= datetime.now():
+                future_events_exist = True
+                break
+
+        if future_events_exist:
+            placeholder = create_line_header(LINE_INFO, line, line_details)
+            
+            travaux_unique_name = set()
+            
+            with st.expander("Détails des travaux", expanded=st.session_state.expand_all):
+                for i, construction in enumerate(construction_details):
+                    
+                    # Filter out finished construction work
+                    date_fin = datetime.strptime(construction['date_fin'], '%Y%m%dT%H%M%S')
+                    if date_fin<datetime.now():
+                        continue
+                    # else:
+                    #     first=False
+
+                    create_streamlit_calendar_event(LINE_INFO, calendar_events, resources, line, travaux_unique_name, construction,i)
+                    
+                    st.write(construction["date_text"])
+                    
+                    # Download ICS file and Google Calendar link in same row
+                    show_dl_buttons(line, i, construction.get("summary"),construction.get("google_calendar"))
+
+    st.write("")
+    st.write("---")
+    st.write("")
+    st.header("Vue calendaire")
+
+    cal_event = create_st_calendar(calendar_events,resources)
+    if cal_event and cal_event["callback"] =="eventClick":
+        line = cal_event["eventClick"]["event"]["extendedProps"]["line"]
+        construction_id = cal_event["eventClick"]["event"]["extendedProps"]["construction_id"]
+        summary = cal_event["eventClick"]["event"]["title"]
+        google_calendar = cal_event["eventClick"]["event"]["extendedProps"]["google_calendar"]
+        st.subheader(summary)
+        show_dl_buttons(line, construction_id, summary,google_calendar,additional_key="2")
+    
+if __name__=="__main__":
+    main()

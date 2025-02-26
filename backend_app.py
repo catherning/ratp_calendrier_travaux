@@ -81,14 +81,14 @@ def parse_construction_page(source_text):
         
         "Exemple 2 d'input :"
         """
-            "En raison de travaux de renouvellement des appareils de voie, la ligne 8 du métro sera fermée, sur toute la ligne, tous les dimanches du 1er janvier au 20 février 2025 inclus.
+            "En raison de travaux de renouvellement des appareils de voie, la ligne 8 du métro sera fermée, sur toute la ligne, tous les dimanches du 1er janvier au 20 février 2025 inclus à partir de 22h.
         """
         "Output :"
         """
         ```json
         [{"date_debut": "20250215T220000",
         "date_fin": "20250220T060000",
-        "date_text": "tous les dimanches du 1er janvier au 20 février 2025 inclus",
+        "date_text": "tous les dimanches du 1er janvier au 20 février 2025 inclus à partir de 22h",
         "summary":"Ligne 3 - Travaux entre Pont de Levallois-Bécon et Wagram",
         "stations":"Pont de Levallois-Bécon | Wagram"}
         "rrule":{"freq":"weekly","count":10}
