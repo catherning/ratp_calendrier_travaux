@@ -147,7 +147,7 @@ def main():
         st.text("Cette page présente les prochains travaux qui auront lieu sur les différentes lignes du métro/RER (A et B uniquement) parisien.")
         st.markdown("**Des boutons sont disponibles pour récupérer les dates de travaux sous forme d'événements Outlook ou Google Calendar à ajouter dans votre calendrier. Vous pouvez également cliquer sur un événement du calendrier pour retrouver ces boutons.**")
         st.warning("Les informations des événements sont partiellement générées par l'IA MistralAI  et peuvent contenir des inexactitudes. Veuillez vérifier les détails auprès des sources officielles de la RATP. "
-                   "Cette application n'est pas affiliée à la RATP ou la SNCF, ni soutenues par elles. Il s'agit d'un projet indépendant qui fournit des informations sur les travaux de construction de la RATP"
+                   "Cette application n'est pas affiliée à la RATP ou la SNCF, ni soutenues par elles. Il s'agit d'un projet personnel indépendant qui fournit des informations sur les travaux de construction de la RATP."
                    )
         st.markdown("*Date de dernière mise à jour des données: 18/02/2025*")
     
@@ -169,7 +169,7 @@ def main():
             
             travaux_unique_name = set()
             
-            with st.expander("Détails des travaux", expanded=st.session_state.expand_all):
+            with st.popover(f"![logo]({LINE_INFO[line]["logo"]}) Détails des travaux",use_container_width =True):#, expanded=st.session_state.expand_all):
                 for i, construction in enumerate(construction_details):
                     
                     # Filter out finished construction work
