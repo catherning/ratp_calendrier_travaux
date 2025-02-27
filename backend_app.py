@@ -22,10 +22,9 @@ def get_llm_json_response(prompt,model="mistral/mistral-small-latest") -> str:
     response = completion(model=model, messages=messages)
 
     response_dict = response.choices[0].message.content
-    details = json.loads(response_dict.split("```")[1][4:])
     
     #TODO: use https://docs.litellm.ai/docs/completion/json_mode#pass-in-json_schema
-    return details
+    return response_dict
 
 def parse_construction_page(source_text):
     """Parses a single construction page to extract dates, stations, and descriptions. """
@@ -45,14 +44,40 @@ def parse_construction_page(source_text):
         "Extrait les données des travaux qui vont avoir lieu sur la ligne de métro Parisien. L'objectif est de créer un fichier ics par type de travaux. "
         "Je veux donc en output une liste et avec chaque élément : le nom de l'événement, la date et heure de début, date et heure de fin, l'éventuelle récurrence si c'est pertinent. "
         "Le format doit être un json pour être lisible en Python, je vais parser avec la librairie iCalendar. "
-        "S'il faut une récurrence, ça doit être avec la syntaxe RRULE de iCalendar 4.8.5. Les clés que peut avoir ce dictionnaire sont donc freq, interval, count"
         f"Les dates doivent être au format {DATE_FORMAT}. "
         "Fais attention si c'est indiqué une date incluse ou excluse."
-        "L'output json doit être dans la bonne syntaxe. "
-        "Exemple d'input :"
+        "L'output json doit absolument être dans la bonne syntaxe. "
+        "S'il faut une récurrence, ça doit être avec la syntaxe RRULE de iCalendar 4.8.5. Les clés que peut avoir ce dictionnaire sont donc FREQ, <INTERVAL ou BYDAY>, <COUNT ou UNTIL>. "
+        "Les valeurs de BYDAY possibles sont : SU,MO,TU,WE,TH,FR,SA. INTERVAL permet de sauter tous les X jours, mais a priori on en aurait pas besoin. Et on aurait plutôt besoin de UNTIL que de COUNT. "
+        """Voici des examples en anglais pour les RRULEs : 
+        Daily for 10 occurrences => RRULE:FREQ=DAILY;COUNT=10
+        Daily until December 24, 1997 =>  RRULE:FREQ=DAILY;UNTIL=19971224T000000Z
+        Every 10 days, 5 occurrences =>  RRULE:FREQ=DAILY;INTERVAL=10;COUNT=5
+        Weekly until December 24, 1997 => RRULE:FREQ=WEEKLY;UNTIL=19971224T000000Z
+        Weekly on Tuesday and Thursday for five weeks => RRULE:FREQ=WEEKLY;UNTIL=19971007T000000Z;WKST=SU;BYDAY=TU,TH
+        """
+        "Il vaut mieux utiliser une RRULE si possible que plusieurs éléments dans la liste, pour optimiser le traitement et réduire au mieux le nombre de fichiers. "
+        
+        "Exemple 1 d'input :"
         """
             "En raison de travaux de renouvellement des appareils de voie, la ligne 3 du métro sera fermée, entre les stations Pont de Levallois-Bécon et Wagram, du 15 au 20 février 2025 inclus entre 22h et 6h.
             Un service de bus de remplacement sera à votre disposition entre le terminus de Pont de Levallois-Bécon et la station Wagram, aux mêmes horaires que le métro. "
+        """
+        "Output :"
+        """
+        ```json
+        [{"date_debut": "20250215T220000",
+        "date_fin": "20250220T060000",
+        "summary":"Ligne 3 - Travaux entre Pont de Levallois-Bécon et Wagram",
+        "stations":"Entre Pont de Levallois-Bécon et Wagram"}
+        "rrule":{"freq":"weekly","count":10} 
+        ]
+        ```
+        """
+        
+        "Exemple 2 d'input :"
+        """
+            "En raison de travaux de renouvellement des appareils de voie, la ligne 8 du métro sera fermée, sur toute la ligne, tous les dimanches du 1er janvier au 20 février 2025 inclus.
         """
         "Output :"
         """
@@ -67,14 +92,20 @@ def parse_construction_page(source_text):
         """
         f"Le text à parser est le suivant : {text}"
         )
+    # TODO: try https://github.com/kvh/recurrent to convert to rrule
     max_retries = 4
     attempts = 0
     success = False
 
     while not success and attempts < max_retries:
         try:
-            details = get_llm_json_response(prompt)
-            success = True
+            response = get_llm_json_response(prompt).split("```")
+            for el in response:
+                if el[:4]=="json":
+                    details = json.loads(el[4:])                
+                    success = True
+                    break
+            attempts +=1
         except json.decoder.JSONDecodeError as e:
             attempts += 1
             print(f'Attempt {attempts}: {e}')
@@ -106,9 +137,9 @@ def create_ics_file(construction_details, output_folder,filename) -> None:
     e.add("dtstamp",datetime.now()  )         # Date the event was created (required)
     e.add("vtimezone","Europe/Paris")
     
-    if "rrule" in construction_details.keys():
-        pass # TODO:
-        # e.add('rrule', {'freq': 'daily'})
+    if "rrule" in construction_details.keys(): 
+        e.add('rrule', {'freq': 'daily'})
+        # pass # TODO:
 
     c.add_component(e)
 
@@ -125,8 +156,8 @@ def create_google_event(construction_details) -> str:
     #&details=text
     url = f"https://calendar.google.com/calendar/render?action=TEMPLATE&text={title}&dates={construction_details['date_debut']}/{construction_details['date_fin']}&ctz=Europe/Paris"
     if "rrule" in construction_details.keys():
-        pass # TODO:
-        # url += "&recur=RRULE:FREQ%3DWEEKLY"
+        url += "&recur=RRULE:FREQ%3DWEEKLY"
+        # pass # TODO:
     return url
 
 def main() -> None:
@@ -174,7 +205,7 @@ def main() -> None:
                     no_work.append(i)
             
             data = {k:v for k,v in data.items() if k not in no_work}
-    with open("data/data.json", "w") as f:
+    with open("data/data2.json", "w") as f:
         json.dump(data,f)
     print("Finished")
 
