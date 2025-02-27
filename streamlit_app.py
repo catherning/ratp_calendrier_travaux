@@ -61,7 +61,7 @@ for line, line_details in data.items():
                                 data=ics_file,
                                 file_name=ics_filename,
                                 mime="text/calendar",
-                                key=f"ics_{line}_{construction['summary']}_{i}"  # Unique key
+                                key=f"ics_{line}_{construction['summary']}_{i}"
                             )
 
                 with button_cols[1]:
