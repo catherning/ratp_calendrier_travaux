@@ -1,9 +1,12 @@
-import streamlit as st
-import json
 import os
+import json
 from datetime import datetime
+import streamlit as st
 from streamlit_calendar import calendar
 # import streamlit.components.v1 as components
+
+if os.getenv('STREAMLIT_SERVER') == 'true':
+    os.chdir("/mount/src/ratp_calendrier_travaux/src")
 
 st.set_page_config(
     page_title="Travaux RATP",
