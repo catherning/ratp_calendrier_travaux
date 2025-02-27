@@ -57,3 +57,4 @@ Feel free to submit issues or pull requests for improvements or bug fixes. The c
 - Add Second LLM to check first LLM response is ok ?
 - Add filtering to find the relevant construction work depending on the station (then on a travel plan)
 - Add cron to update the folder with data every month ?
+- Check accessibility

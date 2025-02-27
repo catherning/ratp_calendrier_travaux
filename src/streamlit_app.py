@@ -34,7 +34,7 @@ LINE_INFO = {
 NUM_COLS = 1
 FIRST = True
 
-data_file_path = os.path.join("data", "data.json")
+data_file_path = os.path.join("../data", "data.json")
 
 
 def create_st_calendar(calendar_events,resources):
@@ -63,6 +63,9 @@ def create_st_calendar(calendar_events,resources):
         .fc-toolbar-title {
             font-size: 2rem;
         }
+        .fc-button {
+            background-color:#003ca6;
+        }
     """
     cal = calendar(
         events=calendar_events,
@@ -78,7 +81,7 @@ def show_dl_buttons(line, construction_id, construction_summary,google_link,addi
     button_cols = st.columns([1,5])  # Create two columns for the buttons
     with button_cols[0]:
         ics_filename = f"event_ligne_{construction_summary}_{construction_id+1}.ics"
-        ics_file_path = os.path.join("data", ics_filename)
+        ics_file_path = os.path.join("../data", ics_filename)
         if os.path.exists(ics_file_path):
             with open(ics_file_path, "rb") as ics_file:
                 st.download_button(
@@ -115,15 +118,13 @@ def create_streamlit_calendar_event(LINE_INFO, calendar_events, resources, line,
                 )
 
 def create_line_header(LINE_INFO, line, line_details):
-    placeholder = st.container()
-    col1, col2, col3 = placeholder.columns([1, 12,5],vertical_alignment="center")
+    col1, col2, col3 = st.columns([1, 12,5],vertical_alignment="center")
     with col1:
-        st.image(LINE_INFO[line]["logo"])
+        st.image(LINE_INFO[line]["logo"],width=60)
     with col2:
         st.header(f"Ligne {line}",anchor=line)
     with col3:
         st.link_button("Page de référence RATP", line_details["link"],type="tertiary")
-    return placeholder
 
 def main():
 
@@ -133,26 +134,19 @@ def main():
     if 'expand_all' not in st.session_state:
         st.session_state.expand_all = False
 
-    col1, col2 = st.columns([0.7,0.3],vertical_alignment="bottom")
-    with col1:      
-        st.title("Calendrier des travaux RATP")
-    with col2:
-        # Button to toggle expand all state
-        if st.button("Tout développer / Tout réduire"):
-            st.session_state.expand_all = not st.session_state.expand_all
-
+    st.title("Calendrier des travaux RATP")
 
     with st.sidebar:
         st.header("Présentation")
         st.text("Cette page présente les prochains travaux qui auront lieu sur les différentes lignes du métro/RER (A et B uniquement) parisien.")
         st.markdown("**Des boutons sont disponibles pour récupérer les dates de travaux sous forme d'événements Outlook ou Google Calendar à ajouter dans votre calendrier. Vous pouvez également cliquer sur un événement du calendrier pour retrouver ces boutons.**")
-        st.warning("Les informations des événements sont partiellement générées par l'IA MistralAI  et peuvent contenir des inexactitudes. Veuillez vérifier les détails auprès des sources officielles de la RATP. "
-                   "Cette application n'est pas affiliée à la RATP ou la SNCF, ni soutenues par elles. Il s'agit d'un projet indépendant partant d'un besoin personnel."
-                   )
+        st.warning("Les informations des événements sont partiellement interprétées et générées par l'IA MistralAI  et peuvent contenir des inexactitudes. Veuillez vérifier les détails auprès des sources officielles de la RATP.")
+        st.warning("Cette application n'est pas affiliée à la RATP ou la SNCF, ni soutenues par elles. Il s'agit d'un projet démo indépendant partant d'un besoin personnel.")
         st.markdown("*Date de dernière mise à jour des données: 18/02/2025*")
     
     calendar_events = []
     resources = []
+    no_work_lines = list(LINE_INFO.keys())
     for line, line_details in data.items():
         construction_details = line_details["construction_list"]
         
@@ -162,10 +156,11 @@ def main():
             date_fin = datetime.strptime(construction['date_fin'], '%Y%m%dT%H%M%S')
             if date_fin >= datetime.now():
                 future_events_exist = True
+                no_work_lines.remove(line)
                 break
 
         if future_events_exist:
-            placeholder = create_line_header(LINE_INFO, line, line_details)
+            create_line_header(LINE_INFO, line, line_details)
             
             travaux_unique_name = set()
             
@@ -176,8 +171,6 @@ def main():
                     date_fin = datetime.strptime(construction['date_fin'], '%Y%m%dT%H%M%S')
                     if date_fin<datetime.now():
                         continue
-                    # else:
-                    #     first=False
 
                     create_streamlit_calendar_event(LINE_INFO, calendar_events, resources, line, travaux_unique_name, construction,i)
                     
@@ -185,7 +178,7 @@ def main():
                     
                     # Download ICS file and Google Calendar link in same row
                     show_dl_buttons(line, i, construction.get("summary"),construction.get("google_calendar"))
-
+            
     st.write("")
     st.write("---")
     st.write("")
@@ -199,6 +192,13 @@ def main():
         google_calendar = cal_event["eventClick"]["event"]["extendedProps"]["google_calendar"]
         st.subheader(summary)
         show_dl_buttons(line, construction_id, summary,google_calendar,additional_key="2")
+        
+    st.write("---")
+    st.header("Lignes sans futurs travaux")
+    cols = st.columns(len(no_work_lines))
+    for i,col in enumerate(cols):
+        col.image(LINE_INFO[no_work_lines[i]]["logo"],width=40)
+    
     
 if __name__=="__main__":
     main()
