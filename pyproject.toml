@@ -14,5 +14,6 @@ dependencies = [
     "pyvirtualdisplay>=3.0",
     "requests>=2.32.3",
     "seleniumbase>=4.34.1",
+    "streamlit-calendar>=1.2.1",
     "streamlit>=1.42.0",
 ]
