@@ -40,27 +40,32 @@ for line, line_details in data.items():
     num_columns = len(construction_details)
 
     if construction_details:
-        col1, col2 = st.columns([1, 20])
+        placeholder = st.container()
+        col1, col2 = placeholder.columns([1, 20])
         with col1:
             st.image(LINE_LOGOS[line],width=30)
         with col2:
             st.header(f"Ligne {line}")
-        # cols = st.columns(min(NUM_COLS, num_columns)) 
         
         travaux_unique_name = set()
+        count_finished = 0
         
         with st.expander("Détails des travaux", expanded=False):
             for i, construction in enumerate(construction_details):
-                # col_index = i % NUM_COLS
-                # with cols[col_index]:
+                date_fin = datetime.strptime(construction['date_fin'], '%Y%m%dT%H%M%S')
+                if date_fin<datetime.now():
+                    count_finished+=1
+                    continue
+
                 name = construction["summary"].split(" - ")[1]
                 if name not in travaux_unique_name: 
                     st.subheader(name)
                     st.write(f"Stations: {construction.get('stations', 'N/A')}")
                     travaux_unique_name.add(name)
                     
-                st.write(f"Du {datetime.strptime(construction['date_debut'], '%Y%m%dT%H%M%S').strftime('%d/%m/%Y %H:%M')} au {datetime.strptime(construction['date_fin'], '%Y%m%dT%H%M%S').strftime('%d/%m/%Y %H:%M')}")
-
+                st.write(construction["date_text"])
+                # st.write(f"Du {datetime.strptime(construction['date_debut'], '%Y%m%dT%H%M%S').strftime('%d/%m/%Y %H:%M')} au {date_fin.strftime('%d/%m/%Y %H:%M')}")
+                # https://github.com/im-perativa/streamlit-calendar?tab=readme-ov-file ?
                 # Download ICS file and Google Calendar link in same row
                 button_cols = st.columns(2)  # Create two columns for the buttons
                 with button_cols[0]:
@@ -80,3 +85,7 @@ for line, line_details in data.items():
                     google_calendar_url = construction.get("google_calendar")
                     if google_calendar_url:
                         st.link_button("Ajouter à Google Calendar", google_calendar_url)
+
+            if count_finished==len(construction_details):
+                placeholder.text("Pas de travaux futurs identifiés.")
+                # placeholder.empty()

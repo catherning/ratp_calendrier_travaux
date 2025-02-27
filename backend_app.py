@@ -39,13 +39,13 @@ def parse_construction_page(source_text):
     text = " ".join(soup.find("div",class_="article-content").get_text(strip=True).split(text_end[0])[:-1])
     if text =="":
         text = " ".join(soup.find("div",class_="article-content").get_text(strip=True).split(text_end[1])[:-1])
-        
+    text = text.replace("2 min de lectureFacebookest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserAddtoanyest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserTwitterest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserAddtoanyest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserLinkedinest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserAddtoanyest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserSommaire","")
     prompt = (
         "Extrait les données des travaux qui vont avoir lieu sur la ligne de métro Parisien. L'objectif est de créer un fichier ics par type de travaux. "
         "Je veux donc en output une liste et avec chaque élément : le nom de l'événement, la date et heure de début, date et heure de fin, l'éventuelle récurrence si c'est pertinent. "
         "Le format doit être un json pour être lisible en Python, je vais parser avec la librairie iCalendar. "
-        f"Les dates doivent être au format {DATE_FORMAT}. "
-        "Fais attention si c'est indiqué une date incluse ou excluse."
+        f"Je veux deux 3 champs de date : date_debut, date_fin avec un formattage datetime {DATE_FORMAT} et un champ date_text pour un affichage plus humain qui paraphrase le texte d'origine. "
+        "Fais attention si c'est indiqué une date incluse ou excluse et aux heures."
         "L'output json doit absolument être dans la bonne syntaxe. "
         "S'il faut une récurrence, ça doit être avec la syntaxe RRULE de iCalendar 4.8.5. Les clés que peut avoir ce dictionnaire sont donc <FREQ=daily|weekly>, <BYDAY=SU,MO,TU,WE,TH,FR,SA sans espaces>, <INTERVAL=integer>, <UNTIL=datetime>. "
         "INTERVAL peut être nécessaire s'il y a des travaux toutes les X semaines par exemple. Mais si la fréquence n'est pas régulière, il faut séparer en deux events, un avec un rrule, un sans."
@@ -71,6 +71,7 @@ def parse_construction_page(source_text):
         ```json
         [{"date_debut": "20250215T220000",
         "date_fin": "20250220T060000",
+        "date_text": "Du 15 au 20 février 2025 inclus entre 22h et 6h",
         "summary":"Ligne 3 - Travaux entre Pont de Levallois-Bécon et Wagram",
         "stations":"Pont de Levallois-Bécon | Wagram"}
         "rrule":{"freq":"weekly","count":10} 
@@ -87,6 +88,7 @@ def parse_construction_page(source_text):
         ```json
         [{"date_debut": "20250215T220000",
         "date_fin": "20250220T060000",
+        "date_text": "tous les dimanches du 1er janvier au 20 février 2025 inclus",
         "summary":"Ligne 3 - Travaux entre Pont de Levallois-Bécon et Wagram",
         "stations":"Pont de Levallois-Bécon | Wagram"}
         "rrule":{"freq":"weekly","count":10}
@@ -104,12 +106,16 @@ def parse_construction_page(source_text):
         [
             {"date_debut": "20250412T000000",
             "date_fin": "20250413T230000",
+            "date_text":"Les 12, 13 avril 2025",
             "summary":"Ligne 6 - Travaux entre Daumesnil et Nation",
             "stations":"Daumesnil | Nation"
+            },
             {"date_debut": "20250518T000000",
             "date_fin": "20250519T000000",
+            "date_text":"Le 18 mai 2025",
             "summary":"Ligne 6 - Travaux entre Daumesnil et Nation",
             "stations":"Daumesnil | Nation"
+            }
         ]
         ```
         """
@@ -210,9 +216,9 @@ def main() -> None:
                 # Handle the cookie banner
                 if i==0:
                     try:
-                        sb.wait_for_element('button[id="popin_tc_privacy_button"]', timeout=2)
-                        sb.uc_click('button[id="popin_tc_privacy_button"]')
-                        print("Cookie banner refused. ")
+                        sb.wait_for_element('button[id="popin_tc_privacy_button_3"]', timeout=2)
+                        sb.uc_click('button[id="popin_tc_privacy_button_3"]')
+                        print("Cookie banner accepted. ")
                     except Exception as e:
                         print("Cookie banner not found or could not be clicked:", str(e))
 
