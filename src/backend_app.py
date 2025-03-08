@@ -1,9 +1,10 @@
 # import requests
+import os
+import json
+import csv
 from bs4 import BeautifulSoup
 from icalendar import Calendar, Event
 from datetime import datetime
-import os
-import json
 from dotenv import load_dotenv
 from litellm import completion
 import uuid
@@ -75,7 +76,8 @@ def parse_construction_page(source_text):
         "date_fin": "20250220T060000",
         "date_text": "Du 15 au 20 février 2025 inclus entre 22h et 6h",
         "summary":"Ligne 3 - Travaux entre Pont de Levallois-Bécon et Wagram",
-        "stations":"Pont de Levallois-Bécon | Wagram"}
+        "station_start":"Pont de Levallois-Bécon",
+        "station_end":"Wagram",
         "rrule":{"freq":"weekly","count":10} 
         ]
         ```
@@ -92,7 +94,8 @@ def parse_construction_page(source_text):
         "date_fin": "20250220T060000",
         "date_text": "tous les dimanches du 1er janvier au 20 février 2025 inclus à partir de 22h",
         "summary":"Ligne 3 - Travaux entre Pont de Levallois-Bécon et Wagram",
-        "stations":"Pont de Levallois-Bécon | Wagram"}
+        "station_start":"Pont de Levallois-Bécon",
+        "station_end":"Wagram",
         "rrule":{"freq":"weekly","count":10}
         ]
         ```
@@ -110,13 +113,15 @@ def parse_construction_page(source_text):
             "date_fin": "20250413T230000",
             "date_text":"Les 12, 13 avril 2025",
             "summary":"Ligne 6 - Travaux entre Daumesnil et Nation",
-            "stations":"Daumesnil | Nation"
+            "station_start":"Daumesnil",
+            "station_end":"Nation",
             },
             {"date_debut": "20250518T000000",
             "date_fin": "20250519T000000",
             "date_text":"Le 18 mai 2025",
             "summary":"Ligne 6 - Travaux entre Daumesnil et Nation",
-            "stations":"Daumesnil | Nation"
+            "station_start":"Daumesnil",
+            "station_end":"Nation",
             }
         ]
         ```
@@ -198,6 +203,26 @@ def create_google_event(construction_details) -> str:
         if "interval" in rule:
             url+= f";INTERVAL%3D{rule['interval']}"
     return url
+
+
+def read_gares_data():
+    # with open(Path(DATA_FOLDER,"emplacement-des-gares-idf.csv"), "r") as f:
+    #     data = csv.reader(f)
+    # return data
+    pass
+    # https://github.com/julio24048/neo4j-metro-parisien/tree/main
+    # https://www.di.ens.fr/~granboul/enseignement/mmfai/algo2001-2002/tp7/
+    # SNCF and RATP open data lacking one thing: stations as graph network
+    
+def create_gares_graph():
+    # TODO:
+    # A faire en amont dans backend pour éviter de le faire à chaque fois. A stocker dans un autre fichier
+    pass
+
+def get_stations_between(station_start, station_end,graph):
+    # Get all stations between station_start and station_end. 
+    # A faire en amont dans backend et stocker dans un 2e fichier ou dans data ?    
+    pass
 
 def main() -> None:
     data = {i:{"link":f"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/metro-ligne-{i}-travaux"} for i in range(1, 15)}
