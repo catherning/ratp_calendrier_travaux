@@ -1,5 +1,7 @@
 import os
+from pathlib import Path
 import json
+
 from datetime import datetime
 import streamlit as st
 from streamlit_calendar import calendar
@@ -37,8 +39,15 @@ LINE_INFO = {
 NUM_COLS = 1
 FIRST = True
 
-data_file_path = os.path.join("../data", "data.json")
+DATA_FOLDER = "../data"
+data_file_path = os.path.join(DATA_FOLDER, "data.json")
 
+
+def filter_gare(gare,data): # ou construction_details union par ligne
+    pass
+    # Then
+    # if gare in stations:
+    #     return True
 
 def create_st_calendar(calendar_events,resources):
     calendar_options = {
