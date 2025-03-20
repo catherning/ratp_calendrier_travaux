@@ -53,8 +53,14 @@ Il est né d'un besoin personnel : il existe déjà plusieurs sites d'informatio
 Feel free to submit issues or pull requests for improvements or bug fixes. The code is not clean and it's mainly a PoC.
 
 ### TODO
+- Add filtering to find the relevant construction work depending on the station (then on a travel plan)
+   - Pistes : https://prim.iledefrance-mobilites.fr/fr/jeux-de-donnees/lignes-gtfs
+   - https://prim.iledefrance-mobilites.fr/fr/jeux-de-donnees/offre-horaires-tc-gtfs-idfm?tab=vue_personnalisee
+   - https://github.com/psrc/transit_service_analyst/wiki/transit_service_analyst-documentation
+   - https://github.com/remix/partridge
+   - https://github.com/mrcagney/gtfs_kit
+   - Ou scraping de https://www.ma-ligne.co/ en dernier recours ou demander à ChatGPT d'avoir la liste des lignes
 - Add RER / Transilien lines
 - Add Second LLM to check first LLM response is ok ?
-- Add filtering to find the relevant construction work depending on the station (then on a travel plan)
 - Add cron to update the folder with data every month ?
 - Check accessibility
