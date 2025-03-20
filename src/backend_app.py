@@ -7,6 +7,8 @@ import json
 from dotenv import load_dotenv
 from litellm import completion
 import uuid
+import pandas as pd
+
 
 load_dotenv()
 
@@ -198,10 +200,20 @@ def create_google_event(construction_details) -> str:
     return url
 
 def main() -> None:
-    # data = {}
     data = {i:{"link":f"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/metro-ligne-{i}-travaux"} for i in range(1, 15)}
     data["A"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-a-travaux"}
     data["B"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-b-travaux"}
+    
+    folder = "data/IDFM-gtfs/"
+    routes = pd.read_csv(folder+"routes.txt")
+    trips = pd.read_csv(folder+"trips.txt")
+    stop_times = pd.read_csv(folder+"stop_times.txt")
+    stops = pd.read_csv(folder+"stops.txt")
+    
+    graphs = {}
+    paths = {}
+    for line in data.keys():
+        graphs[i],paths[i] = display_line_structure(str(i),routes, trips, stop_times, stops)
     
     # TODO: prendre de cette page  https://www.bonjour-ratp.fr/actualites/articles/bulletin-travaux-14fev/
     print(f"Found {len(data)} construction detail links. ")
@@ -249,9 +261,172 @@ def main() -> None:
                 #     no_work.append(i)
             
             data = {k:v for k,v in data.items() if "construction_list" in v.keys()}
+            
     with open("data/data2.json", "w") as f:
         json.dump(data,f)
     print("Finished")
+    
+def get_stations_graph_by_line(route_name,routes,trips,stop_times,stops):
+
+    """Récupère le graphe des stations pour une ligne donnée (ex: 'M1' pour la ligne 1)"""
+   
+    # 1. Trouver l'ID de la ligne
+    route_id = routes.loc[(routes["route_short_name"] == route_name) & (routes["agency_id"]=="IDFM:Operator_100"), "route_id"].values
+    if len(route_id) == 0:
+        return f"Ligne {route_name} non trouvée."
+   
+    route_id = route_id[0]
+    
+    # 2. Trouver tous les trip_id associés à cette ligne
+    line_trips = trips.loc[trips["route_id"] == route_id, ["trip_id","trip_headsign"]] # 
+    if len(line_trips) == 0:
+        return f"Aucun trajet trouvé pour la ligne {route_name}."
+    
+    # 3. Récupérer tous les arrêts pour ces trajets
+    all_stops = stop_times.loc[stop_times["trip_id"].isin(line_trips["trip_id"]), ["trip_id", "stop_id", "stop_sequence"]]
+    
+    # 4. Compter le nombre de stations par trajet
+    trip_station_counts = all_stops.groupby("trip_id").size().reset_index(name="station_count")
+    trip_station_counts = trip_station_counts.sort_values("station_count", ascending=False)
+    
+    # 5. Identifier le trajet avec le plus de stations
+    main_trip_id = trip_station_counts.iloc[0]["trip_id"]
+    main_stops = all_stops.loc[all_stops["trip_id"] == main_trip_id, ["stop_id", "stop_sequence"]]
+    main_stops = main_stops.sort_values("stop_sequence")
+    main_stop_ids = set(main_stops["stop_id"])
+    main_headsign = line_trips[line_trips["trip_id"]==main_trip_id]["trip_headsign"]
+
+    # 6. Trouver les trajets qui ont des stations uniques (branches)
+    branch_trips = []
+    
+    distinct_headsigns = list(line_trips["trip_headsign"].unique())
+    distinct_headsigns.remove(main_headsign.values[0])
+
+    for headsign in distinct_headsigns:
+        # Filtrer les trips ayant ce headsign et prendre un sample représentatif
+        relevant_trips = line_trips[line_trips["trip_headsign"] == headsign]
+        
+        # Prendre le trip avec le plus grand nombre d'arrêts (évite les services courts)
+        trip_id = relevant_trips.loc[relevant_trips["trip_id"].map(
+            lambda x: len(all_stops[all_stops["trip_id"] == x])
+        ).idxmax(), "trip_id"]
+
+        # Vérifier les nouveaux stops
+        trip_stops = all_stops.loc[all_stops["trip_id"] == trip_id, "stop_id"]
+        unique_stops = set(trip_stops) - main_stop_ids
+        
+        if len(unique_stops) > 0:
+            branch_trips.append(trip_id)
+            main_stop_ids.update(unique_stops)
+
+
+    # 7. Construire le graphe des stations
+    # Combiner le trajet principal et les branches
+    selected_trips = [main_trip_id] + branch_trips
+    selected_stops = all_stops.loc[all_stops["trip_id"].isin(selected_trips)]
+    
+    # Créer un dictionnaire pour le graphe
+    station_graph = {}
+    
+    # Traiter chaque trajet pour construire les connexions
+    for trip_id in selected_trips:
+        trip_stations = selected_stops.loc[selected_stops["trip_id"] == trip_id].sort_values("stop_sequence")
+        
+        # Utiliser shift pour créer des paires de stations adjacentes
+        prev_stations = trip_stations["stop_id"].iloc[:-1].reset_index(drop=True)
+        next_stations = trip_stations["stop_id"].iloc[1:].reset_index(drop=True)
+        
+        # Créer un DataFrame avec les connexions
+        connections = pd.DataFrame({
+            "prev": prev_stations,
+            "next": next_stations
+        })
+        
+        # Ajouter les connexions au graphe
+        for _, conn in connections.iterrows():
+            prev_id = conn["prev"]
+            next_id = conn["next"]
+            
+            if prev_id not in station_graph:
+                station_graph[prev_id] = {"next": set(), "prev": set()}
+            if next_id not in station_graph:
+                station_graph[next_id] = {"next": set(), "prev": set()}
+                
+            station_graph[prev_id]["next"].add(next_id)
+            station_graph[next_id]["prev"].add(prev_id)
+    
+    # 8. Enrichir avec les noms des stations
+    stop_names = dict(zip(stops["stop_id"], stops["stop_name"]))
+    
+    for stop_id in station_graph:
+        station_graph[stop_id]["name"] = stop_names.get(stop_id, "Station inconnue")
+    
+    return station_graph
+
+
+
+def get_ordered_station_paths(station_graph):
+    """Génère les chemins ordonnés à partir du graphe de stations"""
+    # Trouver les stations de terminus (début de ligne)
+    terminus_stations = [stop_id for stop_id, data in station_graph.items()
+                         if not data["prev"] or len(data["prev"]) == 0]
+    
+    paths = []
+    
+    # Pour chaque terminus, construire un chemin
+    for start_station in terminus_stations:
+        path = []
+        
+        # File d'attente pour le parcours en largeur
+        queue = [(start_station, [])]
+        visited = set()
+        
+        while queue:
+            current, current_path = queue.pop(0)
+            if current in visited:
+                continue
+            
+            visited.add(current)
+            new_path = current_path + [current]
+            
+            # Si c'est une station terminale (pas de station suivante)
+            if not station_graph[current]["next"]:
+                paths.append(new_path)
+            else:
+                # Ajouter les stations suivantes à la file
+                for next_station in station_graph[current]["next"]:
+                    if next_station not in visited:
+                        queue.append((next_station, new_path))
+    
+    # Convertir les IDs en noms de stations
+    named_paths = []
+    for path in paths:
+        named_path = [(station_id, station_graph[station_id]["name"]) for station_id in path]
+        named_paths.append(named_path)
+    
+    return named_paths
+
+def display_line_structure(route_name,routes,trips,stop_times,stops):
+    """Affiche la structure d'une ligne avec toutes ses branches"""
+    graph = get_stations_graph_by_line(route_name,routes,trips,stop_times,stops)
+    
+    if isinstance(graph, str):  # C'est un message d'erreur
+        return graph
+    
+    paths = get_ordered_station_paths(graph)
+    
+    print(f"Structure de la ligne {route_name}:")
+    for i, path in enumerate(paths):
+        print(f"Branche {i+1}:")
+        for j, (station_id, station_name) in enumerate(path):
+            print(f"  {j+1:2d}. {station_name}")
+        print()
+    
+    return graph, paths
+
+
 
 if __name__ == "__main__":
+    # Exemple : récupérer les stations de la ligne 1 (Métro M1)
+    # Charger les fichiers GTFS    
     main()
