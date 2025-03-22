@@ -32,13 +32,27 @@ Il est né d'un besoin personnel : il existe déjà plusieurs sites d'informatio
    ```
    uv sync
    ```
+Install xephyr :
+`sudo apt-get update && sudo apt-get -y install xserver-xephyr`
 
-3. Run the backend application to scrape data and generate ICS files:
+Install chrome 
+```
+wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+sudo dpkg -i ./google-chrome*.deb
+sudo apt-get install -f
+```
+
+# TODO: don't use seleniumbase which is overkill ?
+
+3. Download the GTFS files
+TODO:
+
+4. Run the backend application to scrape data and generate ICS files:
    ```
    uv run backend_app.py
    ```
 
-4. Launch the Streamlit application:
+5. Launch the Streamlit application:
    ```
    uv run streamlit run streamlit_app.py
    ```

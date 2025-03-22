@@ -29,7 +29,7 @@ def get_llm_json_response(prompt,model="mistral/mistral-small-latest") -> str:
     #TODO: use https://docs.litellm.ai/docs/completion/json_mode#pass-in-json_schema
     return response_dict
 
-def parse_construction_page(source_text):
+def parse_construction_page(source_text,graph):
     """Parses a single construction page to extract dates, stations, and descriptions. """
     soup = BeautifulSoup(source_text, 'html.parser')
 
@@ -149,7 +149,9 @@ def parse_construction_page(source_text):
 
     if success:
         for i in range(len(details)):
-            details[i]["summary"] = details[i]["summary"].replace("/","-")
+            details[i]["summary"] = details[i]["summary"].replace("/","-") # ne pas avoir de / entre les stations
+            
+        details[i]["stations_concernes"] = get_stations_between(i,details[i]["station_start"],details[i]["station_end"],graph)
         print('Operation succeeded!')
     else:
         print('All attempts failed.')
@@ -204,99 +206,18 @@ def create_google_event(construction_details) -> str:
             url+= f";INTERVAL%3D{rule['interval']}"
     return url
 
-
-def read_gares_data():
-    # with open(Path(DATA_FOLDER,"emplacement-des-gares-idf.csv"), "r") as f:
-    #     data = csv.reader(f)
-    # return data
-    pass
-    # https://github.com/julio24048/neo4j-metro-parisien/tree/main
-    # https://www.di.ens.fr/~granboul/enseignement/mmfai/algo2001-2002/tp7/
-    # SNCF and RATP open data lacking one thing: stations as graph network
-    
-def create_gares_graph():
-    # TODO:
-    # A faire en amont dans backend pour éviter de le faire à chaque fois. A stocker dans un autre fichier
-    pass
-
-def get_stations_between(station_start, station_end,graph):
-    # Get all stations between station_start and station_end. 
-    # A faire en amont dans backend et stocker dans un 2e fichier ou dans data ?    
-    pass
-
-def main() -> None:
-    data = {i:{"link":f"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/metro-ligne-{i}-travaux"} for i in range(1, 15)}
-    data["A"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-a-travaux"}
-    data["B"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-b-travaux"}
-    
-    folder = "data/IDFM-gtfs/"
-    routes = pd.read_csv(folder+"routes.txt")
-    trips = pd.read_csv(folder+"trips.txt")
-    stop_times = pd.read_csv(folder+"stop_times.txt")
-    stops = pd.read_csv(folder+"stops.txt")
-    
-    graphs = {}
-    paths = {}
-    for line in data.keys():
-        graphs[i],paths[i] = display_line_structure(str(i),routes, trips, stop_times, stops)
-    
-    # TODO: prendre de cette page  https://www.bonjour-ratp.fr/actualites/articles/bulletin-travaux-14fev/
-    print(f"Found {len(data)} construction detail links. ")
-    
-    # URL of the main RATP page
-    with  Display(visible=1, size=(1440, 1880)) as display:
-        # Use SeleniumBase with UC mode and headless mode (Xvfb for virtual display)
-        with SB(uc=True, xvfb=True) as sb:
-            for i,(line_name,line_info) in enumerate(data.items()):
-                sb.uc_open(line_info["link"])
-
-                # Handle the cookie banner
-                if i==0:
-                    try:
-                        sb.wait_for_element('button[id="popin_tc_privacy_button_3"]', timeout=2)
-                        sb.uc_click('button[id="popin_tc_privacy_button_3"]')
-                        print("Cookie banner accepted. ")
-                    except Exception as e:
-                        print("Cookie banner not found or could not be clicked:", str(e))
-
-                # Ensure the page is fully loaded
-                try:
-                    sb.wait_for_element("body", timeout=10)
-                    print(f"Page for line {line_name} loaded successfully. ")
-                except Exception as e:
-                    print("Failed to load the main page:", str(e))
-
-                # Extract the page source and parse it with BeautifulSoup
-                page_source = sb.get_page_source()
-
-                details = parse_construction_page(page_source)
-
-                if details:
-                    # # Step 3: Create ICS files
-                    # print("Creating ICS files... ")
-                    output_folder = "data"
-                    for j,construction_details in enumerate(details):
-                        try:
-                            create_ics_file(construction_details, output_folder, f"event_ligne_{construction_details['summary']}_{j+1}")
-                            details[j]["google_calendar"] = create_google_event(construction_details)
-                        except:
-                            print("L'event n'a pas pu être créé! Syntaxe incorrecte")
-                    data[line_name]["construction_list"] = details
-                # else:
-                #     no_work.append(i)
-            
-            data = {k:v for k,v in data.items() if "construction_list" in v.keys()}
-            
-    with open("data/data2.json", "w") as f:
-        json.dump(data,f)
-    print("Finished")
     
 def get_stations_graph_by_line(route_name,routes,trips,stop_times,stops):
 
     """Récupère le graphe des stations pour une ligne donnée (ex: 'M1' pour la ligne 1)"""
    
     # 1. Trouver l'ID de la ligne
-    route_id = routes.loc[(routes["route_short_name"] == route_name) & (routes["agency_id"]=="IDFM:Operator_100"), "route_id"].values
+    if route_name.isnumeric():
+        agency = "IDFM:Operator_100" # RATP
+    else:
+        agency = "IDFM:71" # RER. XXX: Later IDFM:1046,Transilien 
+        
+    route_id = routes.loc[(routes["route_short_name"] == route_name) & (routes["agency_id"]==agency), "route_id"].values
     if len(route_id) == 0:
         return f"Ligne {route_name} non trouvée."
    
@@ -389,7 +310,6 @@ def get_stations_graph_by_line(route_name,routes,trips,stop_times,stops):
     return station_graph
 
 
-
 def get_ordered_station_paths(station_graph):
     """Génère les chemins ordonnés à partir du graphe de stations"""
     # Trouver les stations de terminus (début de ligne)
@@ -451,7 +371,103 @@ def display_line_structure(route_name,routes,trips,stop_times,stops):
 
 
 
+def get_stations_between(line, station_start, station_end,graph):
+    # Get all stations between station_start and station_end. 
+    # A faire en amont dans backend et stocker dans un 2e fichier ou dans data ?    
+    pass
+
+
+def main() -> None:
+    # TODO: prendre de cette page  https://www.bonjour-ratp.fr/actualites/articles/bulletin-travaux-14fev/
+    data = {i:{"link":f"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/metro-ligne-{i}-travaux"} for i in range(1, 15)}
+    data["A"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-a-travaux"}
+    data["B"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-b-travaux"}
+    
+    DATA_FOLDER = "../data/"
+    
+    if not os.path.exists(DATA_FOLDER + "graph.json") or not os.path.exists(DATA_FOLDER + "graph_paths.json"):
+        folder = DATA_FOLDER + "IDFM-gtfs/"
+        routes = pd.read_csv(folder+"routes.txt")
+        trips = pd.read_csv(folder+"trips.txt")
+        stop_times = pd.read_csv(folder+"stop_times.txt")
+        stops = pd.read_csv(folder+"stops.txt")
+    
+        graphs = {}
+        paths = {}
+        for line in data.keys():
+            try:
+                graphs[line],paths[line] = display_line_structure(str(line),routes, trips, stop_times, stops)
+            except ValueError:
+                print(f"La ligne {line} n'a pas été trouvée.")
+                
+        def set_default(obj):
+            if isinstance(obj, set):
+                return list(obj)
+            raise TypeError
+
+                
+        with open(DATA_FOLDER + "graph.json", "w") as f:
+            json.dump(graphs,f,default=set_default)
+            
+        with open(DATA_FOLDER + "graph_paths.json", "w") as f:
+            json.dump(paths,f,default=set_default)
+    else:
+        with open(DATA_FOLDER + "graph.json", "r") as f:
+            graphs = json.load(f)
+            
+        with open(DATA_FOLDER + "graph_paths.json", "r") as f:
+            paths = json.load(f)
+    
+    print(f"Found {len(data)} construction detail links. ")
+    
+
+    with Display(visible=1, size=(1440, 1880)) as display:
+        # Use SeleniumBase with UC mode and headless mode (Xvfb for virtual display)
+        with SB(uc=True, xvfb=True) as sb:
+            for i,(line_name,line_info) in enumerate(data.items()):
+                sb.uc_open(line_info["link"])
+
+                # Handle the cookie banner
+                if i==0:
+                    try:
+                        sb.wait_for_element('button[id="popin_tc_privacy_button_3"]', timeout=2)
+                        sb.uc_click('button[id="popin_tc_privacy_button_3"]')
+                        print("Cookie banner accepted. ")
+                    except Exception as e:
+                        print("Cookie banner not found or could not be clicked:", str(e))
+
+                # Ensure the page is fully loaded
+                try:
+                    sb.wait_for_element("body", timeout=10)
+                    print(f"Page for line {line_name} loaded successfully. ")
+                except Exception as e:
+                    print("Failed to load the main page:", str(e))
+
+                # Extract the page source and parse it with BeautifulSoup
+                page_source = sb.get_page_source()
+
+                details = parse_construction_page(page_source,graphs[str(line_name)])
+
+                if details:
+                    # # Step 3: Create ICS files
+                    # print("Creating ICS files... ")
+                    for j,construction_details in enumerate(details):
+                        try:
+                            create_ics_file(construction_details, DATA_FOLDER + "event_ics", f"event_ligne_{construction_details['summary']}_{j+1}")
+                            details[j]["google_calendar"] = create_google_event(construction_details)
+                        except:
+                            print("L'event n'a pas pu être créé! Syntaxe incorrecte")
+                    data[line_name]["construction_list"] = details
+                # else:
+                #     no_work.append(i)
+            
+            data = {k:v for k,v in data.items() if "construction_list" in v.keys()}
+            
+    now = datetime.now().strftime("%Y%m%d")
+    with open(DATA_FOLDER + f"data_{now}.json", "w") as f:
+        json.dump(data,f)
+    print("Finished")
+
+
 if __name__ == "__main__":
-    # Exemple : récupérer les stations de la ligne 1 (Métro M1)
-    # Charger les fichiers GTFS    
     main()
