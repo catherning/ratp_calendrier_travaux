@@ -84,7 +84,7 @@ def show_dl_buttons(line, construction_id, construction_summary,google_link,addi
     button_cols = st.columns([1,5])  # Create two columns for the buttons
     with button_cols[0]:
         ics_filename = f"event_ligne_{construction_summary}_{construction_id+1}.ics"
-        ics_file_path = os.path.join("../data", ics_filename)
+        ics_file_path = os.path.join("../data/event_ics", ics_filename)
         if os.path.exists(ics_file_path):
             with open(ics_file_path, "rb") as ics_file:
                 st.download_button(
