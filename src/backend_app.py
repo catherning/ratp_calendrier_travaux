@@ -9,7 +9,9 @@ from dotenv import load_dotenv
 from litellm import completion
 import uuid
 import pandas as pd
-
+from playwright.sync_api import sync_playwright
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
 load_dotenv()
 
@@ -18,18 +20,25 @@ os.environ['PYVIRTUALDISPLAY_DISPLAYFD'] = '0'
 from pyvirtualdisplay import Display
 
 DATE_FORMAT = "%Y%m%dT%H%M%S"
+DATA_FOLDER = "../data/"
 
 def get_llm_json_response(prompt,model="mistral/mistral-small-latest") -> str:
     messages = [{ "content": prompt,"role": "user"}]
 
-    response = completion(model=model, messages=messages)
-
+    try:
+        response = completion(model=model, messages=messages)
+    except:
+        # use local model
+        from transformers import pipeline
+        pipe = pipeline("text-generation", model="../../SmolLM-360M")
+        resp = pipe(prompt)
+        
     response_dict = response.choices[0].message.content
     
     #TODO: use https://docs.litellm.ai/docs/completion/json_mode#pass-in-json_schema
     return response_dict
 
-def parse_construction_page(source_text,graph):
+def parse_construction_page(source_text,path):
     """Parses a single construction page to extract dates, stations, and descriptions. """
     soup = BeautifulSoup(source_text, 'html.parser')
 
@@ -43,6 +52,7 @@ def parse_construction_page(source_text,graph):
     if text =="":
         text = " ".join(soup.find("div",class_="article-content").get_text(strip=True).split(text_end[1])[:-1])
     text = text.replace("2 min de lectureFacebookest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserAddtoanyest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserTwitterest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserAddtoanyest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserLinkedinest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserAddtoanyest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserSommaire","")
+    
     prompt = (
         "Extrait les données des travaux qui vont avoir lieu sur la ligne de métro Parisien. L'objectif est de créer un fichier ics par type de travaux. "
         "Je veux donc en output une liste et avec chaque élément : le nom de l'événement, la date et heure de début, date et heure de fin, l'éventuelle récurrence si c'est pertinent. "
@@ -66,8 +76,8 @@ def parse_construction_page(source_text,graph):
         
         "Exemple 1 d'input :"
         """
-            "En raison de travaux de renouvellement des appareils de voie, la ligne 3 du métro sera fermée, entre les stations Pont de Levallois-Bécon et Wagram, du 15 au 20 février 2025 inclus entre 22h et 6h.
-            Un service de bus de remplacement sera à votre disposition entre le terminus de Pont de Levallois-Bécon et la station Wagram, aux mêmes horaires que le métro. "
+            "En raison de travaux de renouvellement des appareils de voie, la ligne 3 du métro sera fermée, entre les stations Pont de Levallois - Bécon et Wagram, du 15 au 20 février 2025 inclus entre 22h et 6h.
+            Un service de bus de remplacement sera à votre disposition entre le terminus de Pont de Levallois - Bécon et la station Wagram, aux mêmes horaires que le métro. "
         """
         "Output :"
         """
@@ -75,9 +85,8 @@ def parse_construction_page(source_text,graph):
         [{"date_debut": "20250215T220000",
         "date_fin": "20250220T060000",
         "date_text": "Du 15 au 20 février 2025 inclus entre 22h et 6h",
-        "summary":"Ligne 3 - Travaux entre Pont de Levallois-Bécon et Wagram",
-        "station_start":"Pont de Levallois-Bécon",
-        "station_end":"Wagram",
+        "summary":"Ligne 3 - Travaux entre Pont de Levallois - Bécon et Wagram",
+        "stations":"Pont de Levallois - Bécon | Wagram"
         "rrule":{"freq":"weekly","count":10} 
         ]
         ```
@@ -93,14 +102,12 @@ def parse_construction_page(source_text,graph):
         [{"date_debut": "20250215T220000",
         "date_fin": "20250220T060000",
         "date_text": "tous les dimanches du 1er janvier au 20 février 2025 inclus à partir de 22h",
-        "summary":"Ligne 3 - Travaux entre Pont de Levallois-Bécon et Wagram",
-        "station_start":"Pont de Levallois-Bécon",
-        "station_end":"Wagram",
+        "summary":"Ligne 3 - Travaux entre Pont de Levallois - Bécon et Wagram",
+        "stations":"Pont de Levallois - Bécon | Wagram"
         "rrule":{"freq":"weekly","count":10}
         ]
         ```
         """
-        
         "Exemple 3 d'input :"
         """
             "En raison de travaux de renouvellement des appareils de voie, les 12, 13 avril et 18 mai 2025 : la ligne 6 sera fermée entre les stations Daumesnil et Nation ;.
@@ -113,15 +120,13 @@ def parse_construction_page(source_text,graph):
             "date_fin": "20250413T230000",
             "date_text":"Les 12, 13 avril 2025",
             "summary":"Ligne 6 - Travaux entre Daumesnil et Nation",
-            "station_start":"Daumesnil",
-            "station_end":"Nation",
+            "stations":"Daumesnil | Nation"
             },
             {"date_debut": "20250518T000000",
             "date_fin": "20250519T000000",
             "date_text":"Le 18 mai 2025",
             "summary":"Ligne 6 - Travaux entre Daumesnil et Nation",
-            "station_start":"Daumesnil",
-            "station_end":"Nation",
+            "stations":"Daumesnil | Nation"
             }
         ]
         ```
@@ -151,7 +156,8 @@ def parse_construction_page(source_text,graph):
         for i in range(len(details)):
             details[i]["summary"] = details[i]["summary"].replace("/","-") # ne pas avoir de / entre les stations
             
-        details[i]["stations_concernes"] = get_stations_between(i,details[i]["station_start"],details[i]["station_end"],graph)
+        details[i]["stations_concernes"] = get_stations_between(path,details[i]["stations"])
+        # details[i]["stations_concernes"] = get_stations_between(path,details[i]["station_start"],details[i]["station_end"])
         print('Operation succeeded!')
     else:
         print('All attempts failed.')
@@ -312,6 +318,8 @@ def get_stations_graph_by_line(route_name,routes,trips,stop_times,stops):
 
 def get_ordered_station_paths(station_graph):
     """Génère les chemins ordonnés à partir du graphe de stations"""
+    # TODO: get full line, not just branch
+    
     # Trouver les stations de terminus (début de ligne)
     terminus_stations = [stop_id for stop_id, data in station_graph.items()
                          if not data["prev"] or len(data["prev"]) == 0]
@@ -370,22 +378,73 @@ def display_line_structure(route_name,routes,trips,stop_times,stops):
     return graph, paths
 
 
+def get_stations_between(path,stations):
+    try:
+        start,end = stations.split(" | ")
+        stations_concernes = []
+        include=False
+        for branch in path:
+            if len(stations_concernes)!=0:
+                break
+            for station in branch:
+                if station[1]==start or include:
+                    stations_concernes.append(station[1])
+                    include=True
+                if station[1]==end:
+                    break
+    except ValueError:
+        if "toute la ligne" in stations.lower():
+            stations_concernes = [st[1] for st in path[0]]
+        else:
+            stations_concernes = [stations]
+    return stations_concernes
 
-def get_stations_between(line, station_start, station_end,graph):
-    # Get all stations between station_start and station_end. 
-    # A faire en amont dans backend et stocker dans un 2e fichier ou dans data ?    
-    pass
+def refuse_cookies(page):
+    try:
+        page.locator('button[id="popin_tc_privacy_button_3"]').click(timeout=2000)
+        print("Cookie banner accepted.")
+    except Exception as e:
+        print("Cookie banner not found or could not be clicked:", str(e))
 
+def get_page_content(sb,line_info,line_name,i):
+    sb.goto(line_info["link"])
+    if i==0:
+        refuse_cookies(sb)
+    sb.wait_for_selector("body", timeout=10000)
+    print(f"Page for line {line_name} loaded successfully.")
+    return sb.content()
 
-def main() -> None:
+def scrape_data(data,graphs):
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False) # slowmo=50
+        context = browser.new_context(ignore_https_errors=True)
+        page = context.new_page()
+        for i,(line_name,line_info) in enumerate(data.items()):
+            try:
+                page_source = get_page_content(page,line_info,line_name,i)
+                details = parse_construction_page(page_source,graphs[str(line_name)])
+                if details:
+                    for j,construction_details in enumerate(details):
+                        try:
+                            create_ics_file(construction_details, DATA_FOLDER + "event_ics", f"event_ligne_{construction_details['summary']}_{j+1}")
+                            details[j]["google_calendar"] = create_google_event(construction_details)
+                        except:
+                            print("L'event n'a pas pu être créé! Syntaxe incorrecte")
+                    data[line_name]["construction_list"] = details
+            except Exception as e:
+                print(f"Failed to process line {line_name}: {e}")
+        context.close()
+        browser.close()
+        return data
+
+def main(generate_graphs=False,crawl_construction_data=True) -> None:
     # TODO: prendre de cette page  https://www.bonjour-ratp.fr/actualites/articles/bulletin-travaux-14fev/
     data = {i:{"link":f"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/metro-ligne-{i}-travaux"} for i in range(1, 15)}
     data["A"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-a-travaux"}
     data["B"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-b-travaux"}
+
     
-    DATA_FOLDER = "../data/"
-    
-    if not os.path.exists(DATA_FOLDER + "graph.json") or not os.path.exists(DATA_FOLDER + "graph_paths.json"):
+    if generate_graphs or not os.path.exists(DATA_FOLDER + "graph.json") or not os.path.exists(DATA_FOLDER + "graph_paths.json"):
         folder = DATA_FOLDER + "IDFM-gtfs/"
         routes = pd.read_csv(folder+"routes.txt")
         trips = pd.read_csv(folder+"trips.txt")
@@ -417,57 +476,29 @@ def main() -> None:
             
         with open(DATA_FOLDER + "graph_paths.json", "r") as f:
             paths = json.load(f)
+            
     
     print(f"Found {len(data)} construction detail links. ")
+    if crawl_construction_data:
+        data = scrape_data(data,graphs)
+        data = {k:v for k,v in data.items() if "construction_list" in v.keys()}
     
-
-    with Display(visible=1, size=(1440, 1880)) as display:
-        # Use SeleniumBase with UC mode and headless mode (Xvfb for virtual display)
-        with SB(uc=True, xvfb=True) as sb:
-            for i,(line_name,line_info) in enumerate(data.items()):
-                sb.uc_open(line_info["link"])
-
-                # Handle the cookie banner
-                if i==0:
-                    try:
-                        sb.wait_for_element('button[id="popin_tc_privacy_button_3"]', timeout=2)
-                        sb.uc_click('button[id="popin_tc_privacy_button_3"]')
-                        print("Cookie banner accepted. ")
-                    except Exception as e:
-                        print("Cookie banner not found or could not be clicked:", str(e))
-
-                # Ensure the page is fully loaded
-                try:
-                    sb.wait_for_element("body", timeout=10)
-                    print(f"Page for line {line_name} loaded successfully. ")
-                except Exception as e:
-                    print("Failed to load the main page:", str(e))
-
-                # Extract the page source and parse it with BeautifulSoup
-                page_source = sb.get_page_source()
-
-                details = parse_construction_page(page_source,graphs[str(line_name)])
-
-                if details:
-                    # # Step 3: Create ICS files
-                    # print("Creating ICS files... ")
-                    for j,construction_details in enumerate(details):
-                        try:
-                            create_ics_file(construction_details, DATA_FOLDER + "event_ics", f"event_ligne_{construction_details['summary']}_{j+1}")
-                            details[j]["google_calendar"] = create_google_event(construction_details)
-                        except:
-                            print("L'event n'a pas pu être créé! Syntaxe incorrecte")
-                    data[line_name]["construction_list"] = details
-                # else:
-                #     no_work.append(i)
+        now = datetime.now().strftime("%Y%m%d")
+        with open(DATA_FOLDER + f"data_{now}.json", "w") as f:
+            json.dump(data,f)
+    else:
+        with open(DATA_FOLDER + "data.json", "r") as f:
+            data = json.load(f)
+        for line, details in data.items():
+            for work in details["construction_list"]:
+                work["stations_concernes"] = get_stations_between(paths[line],work["stations"])
+                
+        now = datetime.now().strftime("%Y%m%d")
+        with open(DATA_FOLDER + f"data_{now}.json", "w") as f:
+            json.dump(data,f)
             
-            data = {k:v for k,v in data.items() if "construction_list" in v.keys()}
-            
-    now = datetime.now().strftime("%Y%m%d")
-    with open(DATA_FOLDER + f"data_{now}.json", "w") as f:
-        json.dump(data,f)
     print("Finished")
 
 
 if __name__ == "__main__":
-    main()
+    main(generate_graphs=False,crawl_construction_data=False)

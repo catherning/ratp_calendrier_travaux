@@ -40,7 +40,7 @@ NUM_COLS = 1
 FIRST = True
 
 DATA_FOLDER = "../data"
-data_file_path = os.path.join(DATA_FOLDER, "data.json")
+data_file_path = os.path.join(DATA_FOLDER, "data_20250323.json")
 
 
 def filter_gare(gare,data): # ou construction_details union par ligne
@@ -48,6 +48,36 @@ def filter_gare(gare,data): # ou construction_details union par ligne
     # Then
     # if gare in stations:
     #     return True
+
+
+def get_stations_for_line(data, line):
+    if line not in data:
+        return []
+    
+    # Extraire toutes les stations de tous les chemins
+    all_stations = []
+    for path in data[line]["paths"]:
+        all_stations.extend([(station_id, station_name) for station_id, station_name in path])
+    
+    # Éliminer les doublons tout en préservant l'ordre
+    unique_stations = []
+    unique_ids = set()
+    for station_id, station_name in all_stations:
+        if station_id not in unique_ids:
+            unique_stations.append((station_id, station_name))
+            unique_ids.add(station_id)
+    
+    return unique_stations
+
+# Fonction pour trouver les travaux qui concernent une station
+def find_travaux_for_station(data, line, station_id):
+    if line not in data or "travaux" not in data[line]:
+        return []
+    
+    return [
+        travail for travail in data[line]["travaux"]
+        if station_id in travail["stations_concernees"]
+    ]
 
 def create_st_calendar(calendar_events,resources):
     calendar_options = {
@@ -156,9 +186,59 @@ def main():
         st.warning("Cette application n'est pas affiliée à la RATP ou la SNCF, ni soutenues par elles. Il s'agit d'un projet démo indépendant partant d'un besoin personnel.")
         st.markdown("*Date de dernière mise à jour des données: 18/02/2025*")
     
+    
+    # Premier niveau de filtre : sélection de la ligne
+    
     calendar_events = []
     resources = []
     no_work_lines = list(LINE_INFO.keys())
+    selected_line = st.selectbox("Sélectionnez une ligne", no_work_lines)
+    
+    if selected_line:
+            # Obtenir les stations pour la ligne sélectionnée
+            stations = get_stations_for_line(data, selected_line)
+            station_names = [station[1] for station in stations]  # Noms des stations pour l'affichage
+            station_ids = [station[0] for station in stations]    # IDs des stations pour le traitement
+            
+            # Deuxième niveau de filtre : sélection de la station
+            selected_station_index = st.selectbox(
+                "Sélectionnez une station", 
+                range(len(station_names)),
+                format_func=lambda i: station_names[i]
+            )
+            
+            if selected_station_index is not None:
+                selected_station_id = station_ids[selected_station_index]
+                selected_station_name = station_names[selected_station_index]
+                
+                # Trouver les travaux concernant cette station
+                travaux = find_travaux_for_station(data, selected_line, selected_station_id)
+                
+                # Afficher les résultats
+                st.subheader(f"Travaux concernant la station {selected_station_name}")
+                
+                if travaux:
+                    for travail in travaux:
+                        with st.expander(f"{travail['description']} ({travail['date_debut']} - {travail['date_fin']})"):
+                            st.write(f"**Période**: Du {travail['date_debut']} au {travail['date_fin']}")
+                            
+                            # Calculer les stations concernées (noms)
+                            stations_names = []
+                            for s_id in travail['stations_concernees']:
+                                for idx, (station_id, station_name) in enumerate(stations):
+                                    if station_id == s_id:
+                                        stations_names.append(station_name)
+                                        break
+                            
+                            st.write(f"**Stations concernées**: {', '.join(stations_names)}")
+                            
+                            # Bouton de téléchargement
+                            st.markdown(f"[Télécharger le calendrier ICS]({travail['download_link']})")
+                else:
+                    st.info("Aucun travaux ne concerne cette station actuellement.")
+    
+    
+    # Show all works
     for line, line_details in data.items():
         construction_details = line_details["construction_list"]
         
