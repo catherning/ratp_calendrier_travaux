@@ -79,6 +79,10 @@ Feel free to submit issues or pull requests for improvements or bug fixes. The c
    - https://github.com/mrcagney/gtfs_kit
    - Ou scraping de https://www.ma-ligne.co/ en dernier recours ou demander à ChatGPT d'avoir la liste des lignes
 - Add RER / Transilien lines
+- Add backend cron to update the folder with data every week
+- Revamp front: change from streamlit? 
+- CICD ?
 - Add Second LLM to check first LLM response is ok ?
-- Add cron to update the folder with data every month ?
 - Check accessibility
+- Expose API endpoint on construction work? only if there's other use cases
+- Store history of construction works?  
