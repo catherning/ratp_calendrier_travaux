@@ -40,7 +40,7 @@ NUM_COLS = 1
 FIRST = True
 
 DATA_FOLDER = "../data"
-data_file_path = os.path.join(DATA_FOLDER, "data_20250323.json")
+data_file_path = os.path.join(DATA_FOLDER, "data_20260426.json")
 
 
 def filter_gare(gare,data): # ou construction_details union par ligne

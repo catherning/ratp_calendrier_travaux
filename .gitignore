@@ -1,0 +1,7 @@
+.ics
+.json
+.env
+*.deb
+data/
+.venv/
+downloaded_files/

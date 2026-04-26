@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 from litellm import completion
 import uuid
 import pandas as pd
-from playwright.sync_api import sync_playwright
-import ssl
-ssl._create_default_https_context = ssl._create_unverified_context
+# from playwright.sync_api import sync_playwright
+# import ssl
+# ssl._create_default_https_context = ssl._create_unverified_context
 
 load_dotenv()
 
@@ -47,12 +47,7 @@ def parse_construction_page(source_text,path):
     
 
     # Example parsing logic:
-    text_end = ["Pour adapter au mieux votre trajet","Pour adapter au mieux vos trajets"]
-    text = " ".join(soup.find("div",class_="article-content").get_text(strip=True).split(text_end[0])[:-1])
-    if text =="":
-        text = " ".join(soup.find("div",class_="article-content").get_text(strip=True).split(text_end[1])[:-1])
-    text = text.replace("2 min de lectureFacebookest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserAddtoanyest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserTwitterest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserAddtoanyest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserLinkedinest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserAddtoanyest désactivé. Autorisez le dépôt de cookies pour accéder au contenu.AccepterPersonaliserSommaire","")
-    
+    all_works = " ||| ".join([text.get_text(strip=True) for text in soup.find_all("div",class_="squeezecnt")])
     prompt = (
         "Extrait les données des travaux qui vont avoir lieu sur la ligne de métro Parisien. L'objectif est de créer un fichier ics par type de travaux. "
         "Je veux donc en output une liste et avec chaque élément : le nom de l'événement, la date et heure de début, date et heure de fin, l'éventuelle récurrence si c'est pertinent. "
@@ -61,6 +56,7 @@ def parse_construction_page(source_text,path):
         "Fais attention si c'est indiqué une date incluse ou excluse et aux heures."
         "L'output json doit absolument être dans la bonne syntaxe. "
         "S'il faut une récurrence, ça doit être avec la syntaxe RRULE de iCalendar 4.8.5. Les clés que peut avoir ce dictionnaire sont donc <FREQ=daily|weekly>, <BYDAY=SU,MO,TU,WE,TH,FR,SA sans espaces>, <INTERVAL=integer>, <UNTIL=datetime>. "
+        "Attention, respecte ces clés, on ne peut pas avoir d'autres clés, dont BYWEEKDAY."
         "INTERVAL peut être nécessaire s'il y a des travaux toutes les X semaines par exemple. Mais si la fréquence n'est pas régulière, il faut séparer en deux events, un avec un rrule, un sans."
         "Pour les stations, si c'est une liste de station, alors sépare par une virgule ','. Si c'est entre 2 stations, sépare par un pipe |. "
         "Pour le champ summary, ça va être utilisé pour créer le fichier ics, donc il ne faut pas des caractères incompatibles avec un nom de fichier, genre / ou |. "
@@ -131,7 +127,7 @@ def parse_construction_page(source_text,path):
         ]
         ```
         """
-        f"Le text à parser est le suivant : {text}"
+        f"Le text à parser est le suivant : {all_works}"
         )
     # TODO: try https://github.com/kvh/recurrent to convert to rrule
     max_retries = 4
@@ -156,9 +152,9 @@ def parse_construction_page(source_text,path):
         for i in range(len(details)):
             details[i]["summary"] = details[i]["summary"].replace("/","-") # ne pas avoir de / entre les stations
             
-        details[i]["stations_concernes"] = get_stations_between(path,details[i]["stations"])
+        # details[i]["stations_concernes"] = get_stations_between(path,details[i]["stations"])
         # details[i]["stations_concernes"] = get_stations_between(path,details[i]["station_start"],details[i]["station_end"])
-        print('Operation succeeded!')
+        print(f'Construction work information extracted: {details[i]}')
     else:
         print('All attempts failed.')
         return None
@@ -414,7 +410,7 @@ def get_page_content(sb,line_info,line_name,i):
     print(f"Page for line {line_name} loaded successfully.")
     return sb.content()
 
-def scrape_data(data,graphs):
+def scrape_data2(data,graphs):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False) # slowmo=50
         context = browser.new_context(ignore_https_errors=True)
@@ -429,13 +425,60 @@ def scrape_data(data,graphs):
                             create_ics_file(construction_details, DATA_FOLDER + "event_ics", f"event_ligne_{construction_details['summary']}_{j+1}")
                             details[j]["google_calendar"] = create_google_event(construction_details)
                         except:
-                            print("L'event n'a pas pu être créé! Syntaxe incorrecte")
+                            print("L'event n'a pas pu être créé! Syntaxe incorrecte:", str(e))
+                            print("Construction details that caused the error:", construction_details)
+                            # TODO: means LLM extraction was incorrect, we should log this and maybe retry with a more specific prompt or a different LLM.
+
                     data[line_name]["construction_list"] = details
             except Exception as e:
                 print(f"Failed to process line {line_name}: {e}")
         context.close()
         browser.close()
         return data
+    
+def scrape_data(data,graphs):
+    with Display(visible=1, size=(1440, 1880)) as display:
+        # Use SeleniumBase with UC mode and headless mode (Xvfb for virtual display)
+        with SB(uc=True, xvfb=True) as sb:
+            for i,(line_name,line_info) in enumerate(data.items()):
+                sb.uc_open(line_info["link"])
+
+                # Handle the cookie banner
+                if i==0:
+                    try:
+                        sb.wait_for_element('button[id="popin_tc_privacy_button_3"]', timeout=2)
+                        sb.uc_click('button[id="popin_tc_privacy_button_3"]')
+                        print("Cookie banner accepted. ")
+                    except Exception as e:
+                        print("Cookie banner not found or could not be clicked:", str(e))
+
+                # Ensure the page is fully loaded
+                try:
+                    sb.wait_for_element("body", timeout=10)
+                    print(f"Page for line {line_name} loaded successfully. ")
+                except Exception as e:
+                    print("Failed to load the main page:", str(e))
+
+                # Extract the page source and parse it with BeautifulSoup
+                page_source = sb.get_page_source()
+
+                details = parse_construction_page(page_source,graphs[str(line_name)])
+
+                if details:
+                    # # Step 3: Create ICS files
+                    # print("Creating ICS files... ")
+                    for j,construction_details in enumerate(details):
+                        try:
+                            create_ics_file(construction_details, DATA_FOLDER + "event_ics", f"event_ligne_{construction_details['summary']}_{j+1}")
+                            details[j]["google_calendar"] = create_google_event(construction_details)
+                        except:
+                            print("L'event n'a pas pu être créé! Syntaxe incorrecte:", str(e))
+                            print("Construction details that caused the error:", construction_details)
+                    data[line_name]["construction_list"] = details
+                # else:
+                #     no_work.append(i)
+    return data
+    
 
 def main(generate_graphs=False,crawl_construction_data=True) -> None:
     # TODO: prendre de cette page  https://www.bonjour-ratp.fr/actualites/articles/bulletin-travaux-14fev/
@@ -494,11 +537,11 @@ def main(generate_graphs=False,crawl_construction_data=True) -> None:
                 work["stations_concernes"] = get_stations_between(paths[line],work["stations"])
                 
         now = datetime.now().strftime("%Y%m%d")
-        with open(DATA_FOLDER + f"data_{now}.json", "w") as f:
-            json.dump(data,f)
+        with open(DATA_FOLDER + f"data_{now}.json", "w", encoding="utf-8") as f:
+            json.dump(data,f, ensure_ascii=False)
             
     print("Finished")
 
 
 if __name__ == "__main__":
-    main(generate_graphs=False,crawl_construction_data=False)
+    main(generate_graphs=False,crawl_construction_data=True)
