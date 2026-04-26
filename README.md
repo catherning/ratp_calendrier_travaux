@@ -42,7 +42,11 @@ sudo dpkg -i ./google-chrome*.deb
 sudo apt-get install -f
 ```
 
-# TODO: don't use seleniumbase which is overkill ?
+# TODO: don't use seleniumbase which is overkill ? => playwright ?
+In this case: 
+```
+uv run playwright install
+```
 
 3. Download the GTFS files
 TODO:
