@@ -86,3 +86,39 @@ Feel free to submit issues or pull requests for improvements or bug fixes. The c
 - Check accessibility
 - Expose API endpoint on construction work? only if there's other use cases
 - Store history of construction works?  
+
+#### Security (do first)
+  -  Rotate the Mistral API key — a real key is in .env which could be accidentally exposed
+  -  Remove --server.enableXsrfProtection false from .devcontainer/devcontainer.json — disables CSRF protection even for shared Codespaces
+#### Backend (src/backend_app.py)
+- Bugs (crashers)
+  -  Fix get_llm_json_response fallback: response is never assigned when the API call fails, causing NameError on line ~35; the fallback also produces a completely different object structure
+  -  Fix bare except: blocks in scrape_data/scrape_data2 (~lines 456, 474) that reference unbound e — any ICS creation error raises a second NameError, masking the original
+  -  Guard rrule["byday"] access (~line 168) — crashes with KeyError when LLM returns an rrule without byday (e.g., simple daily recurrences)
+  -  Fix or delete scrape_data2 — calls sync_playwright but the import is commented out, making it a silent dead function
+- Correctness
+  -  Move print(f'Construction work information extracted: {details[i]}') inside the loop (~line 153) — currently only prints the last element
+  -  Replace e.add("vtimezone", "Europe/Paris") with proper timezone-aware datetime objects — VTIMEZONE is a calendar component, not an event property
+  -  Fix LLM prompt examples — both JSON examples are missing a comma between "stations" and "rrule", which may teach the LLM to produce invalid JSON
+- Code quality
+  -  Replace relative DATA_FOLDER = "../data/" with a path relative to __file__ — current code breaks if not run from src/
+  -  Add tests for GTFS path-finding functions (get_stations_graph_by_line, get_ordered_station_paths) — complex logic, zero test coverage
+-  Resolve # TODOs and pass functions
+
+#### Frontend (src/streamlit_app.py)
+- Bugs (crashers)
+  -  Fix travail['download_link'] KeyError in the station-filter UI (~line 241) — field does not exist in the current data format
+  -  Guard no_work_lines.remove(line) (~line 261) — raises ValueError if data contains a line not present in LINE_INFO
+- Correctness
+  -  Convert date_debut/date_fin from %Y%m%dT%H%M%S to ISO 8601 before passing to streamlit-calendar — FullCalendar.js may misparse the current format
+  -  Use date_text field for human-readable date display in the station-filter expander instead of raw 20260301T220000 strings
+- Code quality / UX 
+  -  Deduplicate the "show all" and station-filter UIs — both render simultaneously, creating visual redundancy
+  -  Add line "15" (Grand Paris Express) to LINE_INFO if it should be supported, or cap the backend scrape range to match
+- Infrastructure / Config
+  -  Fix .devcontainer/devcontainer.json Python version: image uses python:1-3.11-bullseye but pyproject.toml requires >=3.12
+  -  Fix devcontainer postAttachCommand and openFiles paths — both reference streamlit_app.py at the project root, not src/streamlit_app.py
+  -  Switch devcontainer updateContentCommand from pip3 install to uv sync to respect the lockfile
+  -  Clean up pyproject.toml: remove python-certifi-win32 (Windows-only), pyautogui (unused), mistral-inference (pulls local model weights but only API is used); add pandas as an explicit dependency; move ipykernel/pytest/pytest-playwright to [project.optional-dependencies.dev]
+  -  Clean up data/ folder: remove or archive old data_YYYYMMDD.json files; establish a clear naming convention; remove committed .ics files that should be gitignored
+  -  Fix README.md: update file paths (src/backend_app.py, src/streamlit_app.py), fix lockfile name (uv.lock not pyproject.lock), and update run commands accordingly
