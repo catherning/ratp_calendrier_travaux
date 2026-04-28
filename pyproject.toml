@@ -3,7 +3,7 @@ name = "ratp-calendrier-travaux"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = "==3.12.*"
 dependencies = [
     "beautifulsoup4>=4.12.3",
     "icalendar>=6.1.1",
@@ -19,5 +19,5 @@ dependencies = [
     "seleniumbase>=4.34.1",
     "streamlit-calendar>=1.2.1",
     "streamlit>=1.42.0",
-    "transformers>=4.50.0",
+    # "transformers>=4.50.0",  # Optional: only needed as LLM fallback
 ]

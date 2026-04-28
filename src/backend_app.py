@@ -23,20 +23,76 @@ DATE_FORMAT = "%Y%m%dT%H%M%S"
 DATA_FOLDER = "../data/"
 
 def get_llm_json_response(prompt,model="mistral/mistral-small-latest") -> str:
+    # TODO: use Vertex when deployed in GCP ?
     messages = [{ "content": prompt,"role": "user"}]
 
     try:
         response = completion(model=model, messages=messages)
     except:
-        # use local model
-        from transformers import pipeline
-        pipe = pipeline("text-generation", model="../../SmolLM-360M")
-        resp = pipe(prompt)
-        
-    response_dict = response.choices[0].message.content
+        # Fallback to local model if available
+        try:
+            from transformers import pipeline
+            pipe = pipeline("text-generation", model="../../SmolLM-360M")
+            resp = pipe(prompt)
+            response_dict = resp[0]['generated_text']
+        except ImportError:
+            # If transformers not available, return error message
+            response_dict = '{"error": "LLM service unavailable and no fallback model"}'
     
     #TODO: use https://docs.litellm.ai/docs/completion/json_mode#pass-in-json_schema
     return response_dict
+
+def retry_construction_detail_with_error(construction_details, error, all_works_text, max_retries=2):
+    # TODO: see if can refactor to have a general LLM call with retry with method parse_construction_page. Change the model here to a more powerful one if needed, and keep the smaller one for the first attempt in parse_construction_page
+    """
+    Retry LLM parsing when ICS file creation fails due to malformed construction_details.
+    Provides error context to the LLM to correct the issue.
+    
+    Args:
+        construction_details: The failed construction details dict
+        error: The exception that was raised
+        all_works_text: The original HTML text extracted from the page
+        max_retries: Number of retry attempts
+        
+    Returns:
+        Fixed construction_details dict or None if retry fails
+    """
+    error_msg = str(error)
+    print(f"Retrying construction detail extraction due to error: {error_msg}")
+    print(f"Original construction_details that failed: {construction_details}")
+    
+    corrective_prompt = (
+        "Une tentative de créer un fichier ics a échoué avec l'erreur suivante: "
+        f"{error_msg}\n\n"
+        "Les données extraites précédemment étaient:\n"
+        f"{json.dumps(construction_details, ensure_ascii=False, indent=2)}\n\n"
+        "Voici le texte original à parser:\n"
+        f"{all_works_text}\n\n"
+        "Corrige les données extraites pour que toutes les clés requises soient présentes et bien formatées. "
+        "Assure-toi que:\n"
+        "1. date_debut et date_fin sont au format YYYYMMDDTHHMMSS\n"
+        "2. summary ne contient pas de caractères incompatibles avec un nom de fichier (pas de / ou |)\n"
+        "3. Toutes les clés obligatoires sont présentes: date_debut, date_fin, date_text, summary, stations\n"
+        "4. Si present, rrule doit avoir seulement les clés: freq, byday, interval, until, count\n"
+        "Retourne UNIQUEMENT le JSON corrigé dans un bloc ```json ... ```"
+    )
+    
+    for attempt in range(max_retries):
+        try:
+            response = get_llm_json_response(corrective_prompt)
+            response_lines = response.split("```")
+            for el in response_lines:
+                if el.strip().startswith("json"):
+                    fixed_details = json.loads(el[4:])
+                    print(f"Successfully corrected construction details on attempt {attempt + 1}")
+                    return fixed_details
+            print(f"Retry attempt {attempt + 1}: Could not extract JSON from response")
+        except Exception as e:
+            print(f"Retry attempt {attempt + 1} failed: {e}")
+            continue
+    
+    print("All retry attempts failed. Skipping this construction detail.")
+    return None
 
 def parse_construction_page(source_text,path):
     """Parses a single construction page to extract dates, stations, and descriptions. """
@@ -158,7 +214,7 @@ def parse_construction_page(source_text,path):
     else:
         print('All attempts failed.')
         return None
-    return details
+    return details, all_works
 
 def create_ics_file(construction_details, output_folder,filename) -> None:
     """Creates an ICS file for the given construction details. """
@@ -418,16 +474,27 @@ def scrape_data2(data,graphs):
         for i,(line_name,line_info) in enumerate(data.items()):
             try:
                 page_source = get_page_content(page,line_info,line_name,i)
-                details = parse_construction_page(page_source,graphs[str(line_name)])
-                if details:
+                result = parse_construction_page(page_source,graphs[str(line_name)])
+                if result:
+                    details, all_works = result
                     for j,construction_details in enumerate(details):
                         try:
                             create_ics_file(construction_details, DATA_FOLDER + "event_ics", f"event_ligne_{construction_details['summary']}_{j+1}")
                             details[j]["google_calendar"] = create_google_event(construction_details)
-                        except:
+                        except Exception as e:
                             print("L'event n'a pas pu être créé! Syntaxe incorrecte:", str(e))
                             print("Construction details that caused the error:", construction_details)
-                            # TODO: means LLM extraction was incorrect, we should log this and maybe retry with a more specific prompt or a different LLM.
+                            # Retry with LLM feedback
+                            fixed_details = retry_construction_detail_with_error(construction_details, e, all_works)
+                            if fixed_details:
+                                try:
+                                    create_ics_file(fixed_details, DATA_FOLDER + "event_ics", f"event_ligne_{fixed_details['summary']}_{j+1}")
+                                    details[j] = fixed_details
+                                    details[j]["google_calendar"] = create_google_event(fixed_details)
+                                except Exception as retry_error:
+                                    print(f"Retry failed for construction detail: {retry_error}")
+                            else:
+                                print(f"Could not fix construction detail via LLM retry. Skipping.")
 
                     data[line_name]["construction_list"] = details
             except Exception as e:
@@ -462,18 +529,31 @@ def scrape_data(data,graphs):
                 # Extract the page source and parse it with BeautifulSoup
                 page_source = sb.get_page_source()
 
-                details = parse_construction_page(page_source,graphs[str(line_name)])
+                result = parse_construction_page(page_source,graphs[str(line_name)])
 
-                if details:
+                if result:
+                    details, all_works = result
                     # # Step 3: Create ICS files
                     # print("Creating ICS files... ")
                     for j,construction_details in enumerate(details):
                         try:
                             create_ics_file(construction_details, DATA_FOLDER + "event_ics", f"event_ligne_{construction_details['summary']}_{j+1}")
                             details[j]["google_calendar"] = create_google_event(construction_details)
-                        except:
+                        except Exception as e:
                             print("L'event n'a pas pu être créé! Syntaxe incorrecte:", str(e))
                             print("Construction details that caused the error:", construction_details)
+                            # Retry with LLM feedback
+                            fixed_details = retry_construction_detail_with_error(construction_details, e, all_works)
+                            if fixed_details:
+                                try:
+                                    create_ics_file(fixed_details, DATA_FOLDER + "event_ics", f"event_ligne_{fixed_details['summary']}_{j+1}")
+                                    details[j] = fixed_details
+                                    details[j]["google_calendar"] = create_google_event(fixed_details)
+                                except Exception as retry_error:
+                                    print(f"Retry failed for construction detail: {retry_error}")
+                            else:
+                                print(f"Could not fix construction detail via LLM retry. Skipping.")
+                            
                     data[line_name]["construction_list"] = details
                 # else:
                 #     no_work.append(i)

@@ -27,6 +27,7 @@ Il est né d'un besoin personnel : il existe déjà plusieurs sites d'informatio
    git clone <repository-url>
    cd ratp_calendrier_travaux
    ```
+Download files from https://prim.iledefrance-mobilites.fr/fr/jeux-de-donnees/offre-horaires-tc-gtfs-idfm to data/
 
 2. Install the required dependencies: Use uv
    ```
