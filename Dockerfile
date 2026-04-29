@@ -30,15 +30,20 @@ RUN apt-get update && apt-get install -y \
     libdbus-1-3 \
     libgtk-3-0 \
     libnspr4 \
+    libcurl4 \
     libnss3 \
     libxcomposite1 \
     libxdamage1 \
     libxfixes3 \
     libxkbcommon0 \
     xdg-utils \
+    xserver-xephyr \
     xvfb \
+    python3-tk \
+    python3-dev \
     && wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
     && dpkg -i ./google-chrome*.deb \
+    && apt-get --fix-broken install \
     && rm -rf /var/lib/apt/lists/* *.deb
 
 # Copy virtual environment from builder
@@ -48,9 +53,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /app
 
 # Copy project files (excluding large data directories via .dockerignore)
-COPY pyproject.toml .
+COPY data/ ../data/
 COPY src/ ./src/
-COPY data/ ./data/
 
 # Set environment variables for SeleniumBase
 ENV SELENIUMBASE_HEADLESS=1

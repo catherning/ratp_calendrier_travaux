@@ -9,11 +9,15 @@ from dotenv import load_dotenv
 from litellm import completion
 import uuid
 import pandas as pd
+import logging
 # from playwright.sync_api import sync_playwright
 # import ssl
 # ssl._create_default_https_context = ssl._create_unverified_context
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 from seleniumbase import SB
 os.environ['PYVIRTUALDISPLAY_DISPLAYFD'] = '0'
@@ -22,13 +26,32 @@ from pyvirtualdisplay import Display
 DATE_FORMAT = "%Y%m%dT%H%M%S"
 DATA_FOLDER = "../data/"
 
+def is_running_in_docker() -> bool:
+    """Check if the code is running inside a Docker container."""
+    try:
+        # Check for Docker-specific file
+        if os.path.exists('/.dockerenv'):
+            return True
+        
+        # Check cgroup for Docker
+        with open('/proc/1/cgroup', 'r') as f:
+            if 'docker' in f.read():
+                return True
+        
+        return False
+    except:
+        return False
+
 def get_llm_json_response(prompt,model="mistral/mistral-small-latest") -> str:
     # TODO: use Vertex when deployed in GCP ?
     messages = [{ "content": prompt,"role": "user"}]
 
     try:
-        response = completion(model=model, messages=messages)
-    except:
+        response_dict = completion(model=model, messages=messages)
+        response_dict = response_dict["choices"][0]["message"]["content"]
+        logger.info(f"LLM response: {response_dict}")
+    except Exception as e:
+        logger.error(f"Error occurred while fetching LLM response: {e}")
         # Fallback to local model if available
         try:
             from transformers import pipeline
@@ -58,8 +81,8 @@ def retry_construction_detail_with_error(construction_details, error, all_works_
         Fixed construction_details dict or None if retry fails
     """
     error_msg = str(error)
-    print(f"Retrying construction detail extraction due to error: {error_msg}")
-    print(f"Original construction_details that failed: {construction_details}")
+    logger.info(f"Retrying construction detail extraction due to error: {error_msg}")
+    logger.info(f"Original construction_details that failed: {construction_details}")
     
     corrective_prompt = (
         "Une tentative de créer un fichier ics a échoué avec l'erreur suivante: "
@@ -80,30 +103,35 @@ def retry_construction_detail_with_error(construction_details, error, all_works_
     for attempt in range(max_retries):
         try:
             response = get_llm_json_response(corrective_prompt)
-            response_lines = response.split("```")
+            response_lines = response.split("```") #BUG: doesn't work with LLM local fallback
             for el in response_lines:
                 if el.strip().startswith("json"):
                     fixed_details = json.loads(el[4:])
-                    print(f"Successfully corrected construction details on attempt {attempt + 1}")
+                    logger.info(f"Successfully corrected construction details on attempt {attempt + 1}")
                     return fixed_details
-            print(f"Retry attempt {attempt + 1}: Could not extract JSON from response")
+            logger.info(f"Retry attempt {attempt + 1}: Could not extract JSON from response")
         except Exception as e:
-            print(f"Retry attempt {attempt + 1} failed: {e}")
+            logger.error(f"Retry attempt {attempt + 1} failed: {e}")
             continue
     
-    print("All retry attempts failed. Skipping this construction detail.")
+    logger.error("All retry attempts failed. Skipping this construction detail.")
     return None
 
 def parse_construction_page(source_text,path):
     """Parses a single construction page to extract dates, stations, and descriptions. """
     soup = BeautifulSoup(source_text, 'html.parser')
 
-    if "pas de travaux" in soup.find('div', class_='article__accroche-content').text:
-        return None
-    
+
+    try:
+        if "pas de travaux" in soup.find('div', class_='article__accroche-content').text:
+            return None
+        all_works = " ||| ".join([text.get_text(strip=True) for text in soup.find_all("div",class_="squeezecnt")])
+    except AttributeError:
+        logger.error("Could not find the expected div with class 'article__accroche-content'. Trying bonjour-ratp structure.")
+        # Expect bonjour ratp pages to have construction works listed
+        all_works = soup.find('div', class_='er2njhn h1hztsyi').text
 
     # Example parsing logic:
-    all_works = " ||| ".join([text.get_text(strip=True) for text in soup.find_all("div",class_="squeezecnt")])
     prompt = (
         "Extrait les données des travaux qui vont avoir lieu sur la ligne de métro Parisien. L'objectif est de créer un fichier ics par type de travaux. "
         "Je veux donc en output une liste et avec chaque élément : le nom de l'événement, la date et heure de début, date et heure de fin, l'éventuelle récurrence si c'est pertinent. "
@@ -111,7 +139,8 @@ def parse_construction_page(source_text,path):
         f"Je veux deux 3 champs de date : date_debut, date_fin avec un formattage datetime {DATE_FORMAT} et un champ date_text pour un affichage plus humain qui paraphrase le texte d'origine. "
         "Fais attention si c'est indiqué une date incluse ou excluse et aux heures."
         "L'output json doit absolument être dans la bonne syntaxe. "
-        "S'il faut une récurrence, ça doit être avec la syntaxe RRULE de iCalendar 4.8.5. Les clés que peut avoir ce dictionnaire sont donc <FREQ=daily|weekly>, <BYDAY=SU,MO,TU,WE,TH,FR,SA sans espaces>, <INTERVAL=integer>, <UNTIL=datetime>. "
+        "Retourne UNIQUEMENT le JSON corrigé dans un bloc ```json ... ``` sans explication"
+        "S'il faut une récurrence, ça doit être avec la syntaxe RRULE de iCalendar 4.8.5. Les clés que DOIT avoir ce dictionnaire sont donc <FREQ=daily|weekly>, <BYDAY=SU,MO,TU,WE,TH,FR,SA sans espaces>, <INTERVAL=integer>, <UNTIL=datetime>. "
         "Attention, respecte ces clés, on ne peut pas avoir d'autres clés, dont BYWEEKDAY."
         "INTERVAL peut être nécessaire s'il y a des travaux toutes les X semaines par exemple. Mais si la fréquence n'est pas régulière, il faut séparer en deux events, un avec un rrule, un sans."
         "Pour les stations, si c'est une liste de station, alors sépare par une virgule ','. Si c'est entre 2 stations, sépare par un pipe |. "
@@ -201,18 +230,17 @@ def parse_construction_page(source_text,path):
             attempts +=1
         except json.decoder.JSONDecodeError as e:
             attempts += 1
-            print(f'Attempt {attempts}: {e}')
+            logger.error(f'Attempt {attempts}: {e}')
             # Log error or take corrective measures
 
     if success:
         for i in range(len(details)):
             details[i]["summary"] = details[i]["summary"].replace("/","-") # ne pas avoir de / entre les stations
-            
-        # details[i]["stations_concernes"] = get_stations_between(path,details[i]["stations"])
-        # details[i]["stations_concernes"] = get_stations_between(path,details[i]["station_start"],details[i]["station_end"])
-        print(f'Construction work information extracted: {details[i]}')
+            # details[i]["stations_concernes"] = get_stations_between(path,details[i]["stations"])
+            # details[i]["stations_concernes"] = get_stations_between(path,details[i]["station_start"],details[i]["station_end"])
+            logger.info(f'Construction work information extracted: {details[i]}')
     else:
-        print('All attempts failed.')
+        logger.error('All attempts failed.')
         return None
     return details, all_works
 
@@ -420,12 +448,11 @@ def display_line_structure(route_name,routes,trips,stop_times,stops):
     
     paths = get_ordered_station_paths(graph)
     
-    print(f"Structure de la ligne {route_name}:")
+    logger.info(f"Structure de la ligne {route_name}:")
     for i, path in enumerate(paths):
-        print(f"Branche {i+1}:")
+        logger.info(f"Branche {i+1}:")
         for j, (station_id, station_name) in enumerate(path):
-            print(f"  {j+1:2d}. {station_name}")
-        print()
+            logger.info(f"  {j+1:2d}. {station_name}")
     
     return graph, paths
 
@@ -451,62 +478,64 @@ def get_stations_between(path,stations):
             stations_concernes = [stations]
     return stations_concernes
 
-def refuse_cookies(page):
-    try:
-        page.locator('button[id="popin_tc_privacy_button_3"]').click(timeout=2000)
-        print("Cookie banner accepted.")
-    except Exception as e:
-        print("Cookie banner not found or could not be clicked:", str(e))
+# def refuse_cookies(page):
+#     try:
+#         page.locator('button[id="popin_tc_privacy_button_3"]').click(timeout=2000)
+#         logger.info("Cookie banner accepted.")
+#     except Exception as e:
+#         logger.error("Cookie banner not found or could not be clicked:", str(e))
 
-def get_page_content(sb,line_info,line_name,i):
-    sb.goto(line_info["link"])
-    if i==0:
-        refuse_cookies(sb)
-    sb.wait_for_selector("body", timeout=10000)
-    print(f"Page for line {line_name} loaded successfully.")
-    return sb.content()
+# def get_page_content(sb,line_info,line_name,i):
+#     sb.goto(line_info["link"])
+#     if i==0:
+#         refuse_cookies(sb)
+#     sb.wait_for_selector("body", timeout=10000)
+#     logger.info(f"Page for line {line_name} loaded successfully.")
+#     return sb.content()
 
-def scrape_data2(data,graphs):
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False) # slowmo=50
-        context = browser.new_context(ignore_https_errors=True)
-        page = context.new_page()
-        for i,(line_name,line_info) in enumerate(data.items()):
-            try:
-                page_source = get_page_content(page,line_info,line_name,i)
-                result = parse_construction_page(page_source,graphs[str(line_name)])
-                if result:
-                    details, all_works = result
-                    for j,construction_details in enumerate(details):
-                        try:
-                            create_ics_file(construction_details, DATA_FOLDER + "event_ics", f"event_ligne_{construction_details['summary']}_{j+1}")
-                            details[j]["google_calendar"] = create_google_event(construction_details)
-                        except Exception as e:
-                            print("L'event n'a pas pu être créé! Syntaxe incorrecte:", str(e))
-                            print("Construction details that caused the error:", construction_details)
-                            # Retry with LLM feedback
-                            fixed_details = retry_construction_detail_with_error(construction_details, e, all_works)
-                            if fixed_details:
-                                try:
-                                    create_ics_file(fixed_details, DATA_FOLDER + "event_ics", f"event_ligne_{fixed_details['summary']}_{j+1}")
-                                    details[j] = fixed_details
-                                    details[j]["google_calendar"] = create_google_event(fixed_details)
-                                except Exception as retry_error:
-                                    print(f"Retry failed for construction detail: {retry_error}")
-                            else:
-                                print(f"Could not fix construction detail via LLM retry. Skipping.")
+# def scrape_data2(data,graphs):
+#     with sync_playwright() as p:
+#         browser = p.chromium.launch(headless=False) # slowmo=50
+#         context = browser.new_context(ignore_https_errors=True)
+#         page = context.new_page()
+#         for i,(line_name,line_info) in enumerate(data.items()):
+#             try:
+#                 page_source = get_page_content(page,line_info,line_name,i)
+#                 result = parse_construction_page(page_source,graphs[str(line_name)])
+#                 if result:
+#                     details, all_works = result
+#                     for j,construction_details in enumerate(details):
+#                         try:
+#                             create_ics_file(construction_details, DATA_FOLDER + "event_ics", f"event_ligne_{construction_details['summary']}_{j+1}")
+#                             details[j]["google_calendar"] = create_google_event(construction_details)
+#                         except Exception as e:
+#                             logger.info("L'event n'a pas pu être créé! Syntaxe incorrecte:", str(e))
+#                             logger.info("Construction details that caused the error:", construction_details)
+#                             # Retry with LLM feedback
+#                             fixed_details = retry_construction_detail_with_error(construction_details, e, all_works)
+#                             if fixed_details:
+#                                 try:
+#                                     create_ics_file(fixed_details, DATA_FOLDER + "event_ics", f"event_ligne_{fixed_details['summary']}_{j+1}")
+#                                     details[j] = fixed_details
+#                                     details[j]["google_calendar"] = create_google_event(fixed_details)
+#                                 except Exception as retry_error:
+#                                     logger.info(f"Retry failed for construction detail: {retry_error}")
+#                             else:
+#                                 logger.info(f"Could not fix construction detail via LLM retry. Skipping.")
 
-                    data[line_name]["construction_list"] = details
-            except Exception as e:
-                print(f"Failed to process line {line_name}: {e}")
-        context.close()
-        browser.close()
-        return data
+#                     data[line_name]["construction_list"] = details
+#             except Exception as e:
+#                 logger.info(f"Failed to process line {line_name}: {e}")
+#         context.close()
+#         browser.close()
+#         return data
     
 def scrape_data(data,graphs):
-    with Display(visible=1, size=(1440, 1880)) as display:
+    with Display(visible=not is_running_in_docker(), size=(1440, 1880)) as display:
         # Use SeleniumBase with UC mode and headless mode (Xvfb for virtual display)
         with SB(uc=True, xvfb=True) as sb:
+            
+            first_bonjour_ratp_page = True
             for i,(line_name,line_info) in enumerate(data.items()):
                 sb.uc_open(line_info["link"])
 
@@ -515,16 +544,24 @@ def scrape_data(data,graphs):
                     try:
                         sb.wait_for_element('button[id="popin_tc_privacy_button_3"]', timeout=2)
                         sb.uc_click('button[id="popin_tc_privacy_button_3"]')
-                        print("Cookie banner accepted. ")
+                        logger.info("Cookie banner accepted. ")
                     except Exception as e:
-                        print("Cookie banner not found or could not be clicked:", str(e))
+                        logger.error("Cookie banner not found or could not be clicked:", str(e))
+                elif "bonjour-ratp" in line_info["link"] and first_bonjour_ratp_page:
+                    try:
+                        sb.wait_for_element('button[id="didomi-notice-agree-button"]', timeout=2000)
+                        sb.uc_click('button[id="didomi-notice-agree-button"]')
+                        logger.info("Cookie banner accepted. ")
+                    except Exception as e:
+                        logger.error("Cookie banner not found or could not be clicked:", str(e))
+                    first_bonjour_ratp_page = False
 
                 # Ensure the page is fully loaded
                 try:
                     sb.wait_for_element("body", timeout=10)
-                    print(f"Page for line {line_name} loaded successfully. ")
+                    logger.info(f"Page for line {line_name} loaded successfully. ")
                 except Exception as e:
-                    print("Failed to load the main page:", str(e))
+                    logger.error("Failed to load the main page:", str(e))
 
                 # Extract the page source and parse it with BeautifulSoup
                 page_source = sb.get_page_source()
@@ -534,14 +571,14 @@ def scrape_data(data,graphs):
                 if result:
                     details, all_works = result
                     # # Step 3: Create ICS files
-                    # print("Creating ICS files... ")
+                    # logger.info("Creating ICS files... ")
                     for j,construction_details in enumerate(details):
                         try:
                             create_ics_file(construction_details, DATA_FOLDER + "event_ics", f"event_ligne_{construction_details['summary']}_{j+1}")
                             details[j]["google_calendar"] = create_google_event(construction_details)
                         except Exception as e:
-                            print("L'event n'a pas pu être créé! Syntaxe incorrecte:", str(e))
-                            print("Construction details that caused the error:", construction_details)
+                            logger.error("L'event n'a pas pu être créé! Syntaxe incorrecte:", str(e))
+                            logger.error("Construction details that caused the error:", construction_details)
                             # Retry with LLM feedback
                             fixed_details = retry_construction_detail_with_error(construction_details, e, all_works)
                             if fixed_details:
@@ -550,9 +587,9 @@ def scrape_data(data,graphs):
                                     details[j] = fixed_details
                                     details[j]["google_calendar"] = create_google_event(fixed_details)
                                 except Exception as retry_error:
-                                    print(f"Retry failed for construction detail: {retry_error}")
+                                    logger.error(f"Retry failed for construction detail: {retry_error}")
                             else:
-                                print(f"Could not fix construction detail via LLM retry. Skipping.")
+                                logger.error(f"Could not fix construction detail via LLM retry. Skipping.")
                             
                     data[line_name]["construction_list"] = details
                 # else:
@@ -561,10 +598,14 @@ def scrape_data(data,graphs):
     
 
 def main(generate_graphs=False,crawl_construction_data=True) -> None:
-    # TODO: prendre de cette page  https://www.bonjour-ratp.fr/actualites/articles/bulletin-travaux-14fev/
-    data = {i:{"link":f"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/metro-ligne-{i}-travaux"} for i in range(1, 15)}
-    data["A"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-a-travaux"}
+    # TODO: tester les pages au format https://www.bonjour-ratp.fr/actualites/articles/bulletin-travaux-25-avril/
+    # et https://www.ratp.fr/les-travaux-en-cours-et-a-venir
+    data = {}
+    # data = {i:{"link":f"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/metro-ligne-{i}-travaux"} for i in range(1, 15)}
+    # data["A"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-a-travaux"}
     data["B"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-b-travaux"}
+    data["C"] = {"link":"https://www.bonjour-ratp.fr/actualites/articles/ligne-rerc-dates-et-horaires-des-fermetures/"}
+    data["D"] = {"link":"https://www.bonjour-ratp.fr/actualites/articles/ligne-rerd-dates-et-horaires-des-fermetures/"}
 
     
     if generate_graphs or not os.path.exists(DATA_FOLDER + "graph.json") or not os.path.exists(DATA_FOLDER + "graph_paths.json"):
@@ -580,7 +621,7 @@ def main(generate_graphs=False,crawl_construction_data=True) -> None:
             try:
                 graphs[line],paths[line] = display_line_structure(str(line),routes, trips, stop_times, stops)
             except ValueError:
-                print(f"La ligne {line} n'a pas été trouvée.")
+                logger.error(f"La ligne {line} n'a pas été trouvée.")
                 
         def set_default(obj):
             if isinstance(obj, set):
@@ -601,7 +642,7 @@ def main(generate_graphs=False,crawl_construction_data=True) -> None:
             paths = json.load(f)
             
     
-    print(f"Found {len(data)} construction detail links. ")
+    logger.info(f"Found {len(data)} construction detail links. ")
     if crawl_construction_data:
         data = scrape_data(data,graphs)
         data = {k:v for k,v in data.items() if "construction_list" in v.keys()}
@@ -620,7 +661,7 @@ def main(generate_graphs=False,crawl_construction_data=True) -> None:
         with open(DATA_FOLDER + f"data_{now}.json", "w", encoding="utf-8") as f:
             json.dump(data,f, ensure_ascii=False)
             
-    print("Finished")
+    logger.info("Finished")
 
 
 if __name__ == "__main__":
