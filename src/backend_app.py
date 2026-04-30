@@ -20,8 +20,6 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 from seleniumbase import SB
-os.environ['PYVIRTUALDISPLAY_DISPLAYFD'] = '0'
-from pyvirtualdisplay import Display
 
 DATE_FORMAT = "%Y%m%dT%H%M%S"
 DATA_FOLDER = "../data/"
@@ -131,89 +129,27 @@ def parse_construction_page(source_text,path):
         # Expect bonjour ratp pages to have construction works listed
         all_works = soup.find('div', class_='er2njhn h1hztsyi').text
 
-    # Example parsing logic:
+    # Prompt compact, mais strict sur le format pour stabiliser la sortie du LLM.
     prompt = (
-        "Extrait les données des travaux qui vont avoir lieu sur la ligne de métro Parisien. L'objectif est de créer un fichier ics par type de travaux. "
-        "Je veux donc en output une liste et avec chaque élément : le nom de l'événement, la date et heure de début, date et heure de fin, l'éventuelle récurrence si c'est pertinent. "
-        "Le format doit être un json pour être lisible en Python, je vais parser avec la librairie iCalendar. "
-        f"Je veux deux 3 champs de date : date_debut, date_fin avec un formattage datetime {DATE_FORMAT} et un champ date_text pour un affichage plus humain qui paraphrase le texte d'origine. "
-        "Fais attention si c'est indiqué une date incluse ou excluse et aux heures."
-        "L'output json doit absolument être dans la bonne syntaxe. "
-        "Retourne UNIQUEMENT le JSON corrigé dans un bloc ```json ... ``` sans explication"
-        "S'il faut une récurrence, ça doit être avec la syntaxe RRULE de iCalendar 4.8.5. Les clés que DOIT avoir ce dictionnaire sont donc <FREQ=daily|weekly>, <BYDAY=SU,MO,TU,WE,TH,FR,SA sans espaces>, <INTERVAL=integer>, <UNTIL=datetime>. "
-        "Attention, respecte ces clés, on ne peut pas avoir d'autres clés, dont BYWEEKDAY."
-        "INTERVAL peut être nécessaire s'il y a des travaux toutes les X semaines par exemple. Mais si la fréquence n'est pas régulière, il faut séparer en deux events, un avec un rrule, un sans."
-        "Pour les stations, si c'est une liste de station, alors sépare par une virgule ','. Si c'est entre 2 stations, sépare par un pipe |. "
-        "Pour le champ summary, ça va être utilisé pour créer le fichier ics, donc il ne faut pas des caractères incompatibles avec un nom de fichier, genre / ou |. "
-        "Si le texte indique qu'il n'y a pas de travaux, retourne un json avec liste vide. "
-        """Voici des examples en anglais pour les RRULEs : 
-        Daily for 10 occurrences => RRULE:FREQ=DAILY;COUNT=10
-        Daily until December 24, 1997 =>  RRULE:FREQ=DAILY;UNTIL=19971224T000000Z
-        Every 10 days, 5 occurrences =>  RRULE:FREQ=DAILY;INTERVAL=10;COUNT=5
-        Weekly until December 24, 1997 => RRULE:FREQ=WEEKLY;UNTIL=19971224T000000Z
-        Weekly on Tuesday and Thursday for five weeks => RRULE:FREQ=WEEKLY;UNTIL=19971007T000000Z;WKST=SU;BYDAY=TU,TH
-        """
-        "Il vaut mieux utiliser une RRULE et des plages de date si possible que plusieurs éléments dans la liste, pour optimiser le traitement et réduire au mieux le nombre de fichiers. "
-        
-        "Exemple 1 d'input :"
-        """
-            "En raison de travaux de renouvellement des appareils de voie, la ligne 3 du métro sera fermée, entre les stations Pont de Levallois - Bécon et Wagram, du 15 au 20 février 2025 inclus entre 22h et 6h.
-            Un service de bus de remplacement sera à votre disposition entre le terminus de Pont de Levallois - Bécon et la station Wagram, aux mêmes horaires que le métro. "
-        """
-        "Output :"
-        """
-        ```json
-        [{"date_debut": "20250215T220000",
-        "date_fin": "20250220T060000",
-        "date_text": "Du 15 au 20 février 2025 inclus entre 22h et 6h",
-        "summary":"Ligne 3 - Travaux entre Pont de Levallois - Bécon et Wagram",
-        "stations":"Pont de Levallois - Bécon | Wagram"
-        "rrule":{"freq":"weekly","count":10} 
-        ]
-        ```
-        """
-        
-        "Exemple 2 d'input :"
-        """
-            "En raison de travaux de renouvellement des appareils de voie, la ligne 8 du métro sera fermée, sur toute la ligne, tous les dimanches du 1er janvier au 20 février 2025 inclus à partir de 22h.
-        """
-        "Output :"
-        """
-        ```json
-        [{"date_debut": "20250215T220000",
-        "date_fin": "20250220T060000",
-        "date_text": "tous les dimanches du 1er janvier au 20 février 2025 inclus à partir de 22h",
-        "summary":"Ligne 3 - Travaux entre Pont de Levallois - Bécon et Wagram",
-        "stations":"Pont de Levallois - Bécon | Wagram"
-        "rrule":{"freq":"weekly","count":10}
-        ]
-        ```
-        """
-        "Exemple 3 d'input :"
-        """
-            "En raison de travaux de renouvellement des appareils de voie, les 12, 13 avril et 18 mai 2025 : la ligne 6 sera fermée entre les stations Daumesnil et Nation ;.
-        """
-        "Attention : on peut optimiser et mettre le 12 et 13 dans un seul évent avec plage de date étendue, et le 18 de manière séparée! Donc Output avec 2 éléments et non 3 dans la liste:"
-        """
-        ```json
-        [
-            {"date_debut": "20250412T000000",
-            "date_fin": "20250413T230000",
-            "date_text":"Les 12, 13 avril 2025",
-            "summary":"Ligne 6 - Travaux entre Daumesnil et Nation",
-            "stations":"Daumesnil | Nation"
-            },
-            {"date_debut": "20250518T000000",
-            "date_fin": "20250519T000000",
-            "date_text":"Le 18 mai 2025",
-            "summary":"Ligne 6 - Travaux entre Daumesnil et Nation",
-            "stations":"Daumesnil | Nation"
-            }
-        ]
-        ```
-        """
-        f"Le text à parser est le suivant : {all_works}"
-        )
+        "Tu extrais des infos de travaux RATP et retournes une liste JSON d'evenements. "
+        "Reponds UNIQUEMENT avec un bloc ```json ... ```, sans texte hors du bloc. "
+        "Chaque evenement contient obligatoirement: date_debut, date_fin, date_text, summary, stations. "
+        f"date_debut et date_fin doivent etre au format {DATE_FORMAT}. "
+        "date_text est une paraphrase humaine du passage source (inclus/exclus, heures et nuances respectees). "
+        "summary doit etre compatible nom de fichier (interdit: / et |). "
+        "stations: "
+        "- liste de stations => separees par virgule ',' ; "
+        "- entre 2 stations => separees par ' | '. "
+        "Si recurrence utile, ajoute rrule (objet) avec uniquement ces cles possibles: "
+        "freq (daily|weekly), byday (SU,MO,TU,WE,TH,FR,SA sans espaces), interval (int), until (datetime), count (int). "
+        "Ne jamais utiliser la cle BYWEEKDAY. "
+        "Si frequence non reguliere, cree plusieurs evenements plutot qu'une rrule incorrecte. "
+        "Essaie de minimiser le nombre d'evenements en fusionnant les plages compatibles. "
+        "Si le texte indique qu'il n'y a pas de travaux, retourne []. "
+        "Exemple recurrence hebdo: [{\"date_debut\":\"20250105T220000\",\"date_fin\":\"20250106T060000\",\"date_text\":\"Tous les dimanches du 5 janvier au 16 fevrier 2025 a partir de 22h\",\"summary\":\"Ligne 8 - Travaux sur toute la ligne\",\"stations\":\"toute la ligne\",\"rrule\":{\"freq\":\"weekly\",\"byday\":\"SU\",\"until\":\"20250216T235900\"}}]. "
+        "Exemple dates irregulieres: [{\"date_debut\":\"20250412T000000\",\"date_fin\":\"20250413T230000\",\"date_text\":\"Les 12 et 13 avril 2025\",\"summary\":\"Ligne 6 - Travaux entre Daumesnil et Nation\",\"stations\":\"Daumesnil | Nation\"},{\"date_debut\":\"20250518T000000\",\"date_fin\":\"20250519T000000\",\"date_text\":\"Le 18 mai 2025\",\"summary\":\"Ligne 6 - Travaux entre Daumesnil et Nation\",\"stations\":\"Daumesnil | Nation\"}]. "
+        f"Texte a parser: {all_works}"
+    )
     # TODO: try https://github.com/kvh/recurrent to convert to rrule
     max_retries = 4
     attempts = 0
@@ -263,10 +199,17 @@ def create_ics_file(construction_details, output_folder,filename) -> None:
     e.add("vtimezone","Europe/Paris")
     
     if "rrule" in construction_details.keys(): 
-        construction_details["rrule"]["byday"] = construction_details["rrule"]["byday"].replace(" ","") 
+        try:
+            construction_details["rrule"]["byday"] = construction_details["rrule"]["byday"].replace(" ","") 
+        except AttributeError:
+            construction_details["rrule"]["byday"] = ",".join(construction_details["rrule"]["byday"])
+            
         rule = construction_details["rrule"].copy()
         rule["byday"] = rule["byday"].split(",") 
-        rule["until"]=datetime.strptime(rule["until"],DATE_FORMAT)
+        try:
+            rule["until"]=datetime.strptime(rule["until"],DATE_FORMAT)
+        except KeyError:
+            pass
         e.add('rrule', rule)
     else:
         e.add("dtend",datetime.strptime(construction_details["date_fin"],DATE_FORMAT))
@@ -531,69 +474,68 @@ def get_stations_between(path,stations):
 #         return data
     
 def scrape_data(data,graphs):
-    with Display(visible=not is_running_in_docker(), size=(1440, 1880)) as display:
-        # Use SeleniumBase with UC mode and headless mode (Xvfb for virtual display)
-        with SB(uc=True, xvfb=True) as sb:
-            
-            first_bonjour_ratp_page = True
-            for i,(line_name,line_info) in enumerate(data.items()):
-                sb.uc_open(line_info["link"])
+    # Use SeleniumBase in headless mode directly; do not rely on an external X display.
+    with SB(uc=True, headless=True) as sb:
+        
+        first_bonjour_ratp_page = True
+        for i,(line_name,line_info) in enumerate(data.items()):
+            sb.uc_open(line_info["link"])
 
-                # Handle the cookie banner
-                if i==0:
-                    try:
-                        sb.wait_for_element('button[id="popin_tc_privacy_button_3"]', timeout=2)
-                        sb.uc_click('button[id="popin_tc_privacy_button_3"]')
-                        logger.info("Cookie banner accepted. ")
-                    except Exception as e:
-                        logger.error("Cookie banner not found or could not be clicked:", str(e))
-                elif "bonjour-ratp" in line_info["link"] and first_bonjour_ratp_page:
-                    try:
-                        sb.wait_for_element('button[id="didomi-notice-agree-button"]', timeout=2000)
-                        sb.uc_click('button[id="didomi-notice-agree-button"]')
-                        logger.info("Cookie banner accepted. ")
-                    except Exception as e:
-                        logger.error("Cookie banner not found or could not be clicked:", str(e))
-                    first_bonjour_ratp_page = False
-
-                # Ensure the page is fully loaded
+            # Handle the cookie banner
+            if i==0:
                 try:
-                    sb.wait_for_element("body", timeout=10)
-                    logger.info(f"Page for line {line_name} loaded successfully. ")
+                    sb.wait_for_element('button[id="popin_tc_privacy_button_3"]', timeout=2)
+                    sb.uc_click('button[id="popin_tc_privacy_button_3"]')
+                    logger.info("Cookie banner accepted. ")
                 except Exception as e:
-                    logger.error("Failed to load the main page:", str(e))
+                    logger.error("Cookie banner not found or could not be clicked:", str(e))
+            elif "bonjour-ratp" in line_info["link"] and first_bonjour_ratp_page:
+                try:
+                    sb.wait_for_element('button[id="didomi-notice-agree-button"]', timeout=2000)
+                    sb.uc_click('button[id="didomi-notice-agree-button"]')
+                    logger.info("Cookie banner accepted. ")
+                except Exception as e:
+                    logger.error("Cookie banner not found or could not be clicked:", str(e))
+                first_bonjour_ratp_page = False
 
-                # Extract the page source and parse it with BeautifulSoup
-                page_source = sb.get_page_source()
+            # Ensure the page is fully loaded
+            try:
+                sb.wait_for_element("body", timeout=10)
+                logger.info(f"Page for line {line_name} loaded successfully. ")
+            except Exception as e:
+                logger.error("Failed to load the main page:", str(e))
 
-                result = parse_construction_page(page_source,graphs[str(line_name)])
+            # Extract the page source and parse it with BeautifulSoup
+            page_source = sb.get_page_source()
 
-                if result:
-                    details, all_works = result
-                    # # Step 3: Create ICS files
-                    # logger.info("Creating ICS files... ")
-                    for j,construction_details in enumerate(details):
-                        try:
-                            create_ics_file(construction_details, DATA_FOLDER + "event_ics", f"event_ligne_{construction_details['summary']}_{j+1}")
-                            details[j]["google_calendar"] = create_google_event(construction_details)
-                        except Exception as e:
-                            logger.error("L'event n'a pas pu être créé! Syntaxe incorrecte:", str(e))
-                            logger.error("Construction details that caused the error:", construction_details)
-                            # Retry with LLM feedback
-                            fixed_details = retry_construction_detail_with_error(construction_details, e, all_works)
-                            if fixed_details:
-                                try:
-                                    create_ics_file(fixed_details, DATA_FOLDER + "event_ics", f"event_ligne_{fixed_details['summary']}_{j+1}")
-                                    details[j] = fixed_details
-                                    details[j]["google_calendar"] = create_google_event(fixed_details)
-                                except Exception as retry_error:
-                                    logger.error(f"Retry failed for construction detail: {retry_error}")
-                            else:
-                                logger.error(f"Could not fix construction detail via LLM retry. Skipping.")
-                            
-                    data[line_name]["construction_list"] = details
-                # else:
-                #     no_work.append(i)
+            result = parse_construction_page(page_source,graphs[str(line_name)])
+
+            if result:
+                details, all_works = result
+                # # Step 3: Create ICS files
+                # logger.info("Creating ICS files... ")
+                for j,construction_details in enumerate(details):
+                    try:
+                        create_ics_file(construction_details, DATA_FOLDER + "event_ics", f"event_ligne_{construction_details['summary']}_{j+1}")
+                        details[j]["google_calendar"] = create_google_event(construction_details)
+                    except Exception as e:
+                        logger.error("L'event n'a pas pu être créé! Syntaxe incorrecte:", str(e))
+                        logger.error("Construction details that caused the error:", construction_details)
+                        # Retry with LLM feedback
+                        fixed_details = retry_construction_detail_with_error(construction_details, e, all_works)
+                        if fixed_details:
+                            try:
+                                create_ics_file(fixed_details, DATA_FOLDER + "event_ics", f"event_ligne_{fixed_details['summary']}_{j+1}")
+                                details[j] = fixed_details
+                                details[j]["google_calendar"] = create_google_event(fixed_details)
+                            except Exception as retry_error:
+                                logger.error(f"Retry failed for construction detail: {retry_error}")
+                        else:
+                            logger.error(f"Could not fix construction detail via LLM retry. Skipping.")
+                        
+                data[line_name]["construction_list"] = details
+            # else:
+            #     no_work.append(i)
     return data
     
 
