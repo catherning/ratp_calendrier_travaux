@@ -54,7 +54,7 @@ WORKDIR /app
 
 # Copy project files (excluding large data directories via .dockerignore)
 COPY data/ ../data/
-COPY src/ ./src/
+COPY ["src/backend_app.py", "src/utils.py", "src/__init__.py", "./src/"]
 
 # Set environment variables for SeleniumBase
 ENV SELENIUMBASE_HEADLESS=1

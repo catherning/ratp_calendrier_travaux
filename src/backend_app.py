@@ -523,9 +523,9 @@ def scrape_data(data,graphs):
 def main(generate_graphs=False,crawl_construction_data=True) -> None:
     # TODO: tester les pages au format https://www.bonjour-ratp.fr/actualites/articles/bulletin-travaux-25-avril/
     # et https://www.ratp.fr/les-travaux-en-cours-et-a-venir
-    data = {}
-    # data = {i:{"link":f"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/metro-ligne-{i}-travaux"} for i in range(1, 15)}
-    # data["A"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-a-travaux"}
+    # data = {}
+    data = {i:{"link":f"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/metro-ligne-{i}-travaux"} for i in range(1, 15)}
+    data["A"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-a-travaux"}
     data["B"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-b-travaux"}
     data["C"] = {"link":"https://www.bonjour-ratp.fr/actualites/articles/ligne-rerc-dates-et-horaires-des-fermetures/"}
     data["D"] = {"link":"https://www.bonjour-ratp.fr/actualites/articles/ligne-rerd-dates-et-horaires-des-fermetures/"}
@@ -565,7 +565,7 @@ def main(generate_graphs=False,crawl_construction_data=True) -> None:
             paths = json.load(f)
             
     
-    logger.info(f"Found {len(data)} construction detail links. ")
+    logger.info(f"Found {len(data)} construction detail links.")
     data_output_path = None
     if crawl_construction_data:
         data = scrape_data(data,graphs)

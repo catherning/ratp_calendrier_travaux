@@ -87,6 +87,7 @@ Feel free to submit issues or pull requests for improvements or bug fixes. The c
 - Check accessibility
 - Expose API endpoint on construction work? only if there's other use cases
 - Store history of construction works?  
+- Use https://github.com/ToroData/Streamlit-App-KeepAlive for streamlit
 
 #### Security (do first)
   -  Rotate the Mistral API key — a real key is in .env which could be accidentally exposed

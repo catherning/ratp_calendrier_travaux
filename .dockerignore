@@ -1,2 +1,5 @@
 data/IDFM-gtfs/
 data/event_ics/
+.env
+downloaded_files/
+__pycache__/

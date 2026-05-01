@@ -1,0 +1,63 @@
+name: Backend Scrape
+
+on:
+  schedule:
+    # Every Sunday at 07:00 UTC
+    - cron: "0 7 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: backend-scrape
+  cancel-in-progress: false
+
+jobs:
+  scrape-and-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Configure these as repository variables
+      DOCKER_IMAGE: ${{ vars.DOCKER_IMAGE }}
+      GCS_BUCKET_NAME: ${{ vars.GCS_BUCKET_NAME }}
+      GCS_BUCKET_PREFIX: ${{ vars.GCS_BUCKET_PREFIX }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "${DOCKER_IMAGE}" ]] || { echo "Missing repo var: DOCKER_IMAGE"; exit 1; }
+          [[ -n "${GCS_BUCKET_NAME}" ]] || { echo "Missing repo var: GCS_BUCKET_NAME"; exit 1; }
+
+      - id: auth
+        name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+
+      - name: Pull Docker image
+        run: docker pull "${DOCKER_IMAGE}"
+
+      - name: Run backend container
+        shell: bash
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-creds.json
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          docker run --rm \
+            -v "${{ steps.auth.outputs.credentials_file_path }}:/tmp/gcp-creds.json:ro" \
+            -e GOOGLE_APPLICATION_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS}" \
+            -e GCS_BUCKET_NAME="${GCS_BUCKET_NAME}" \
+            -e GCS_BUCKET_PREFIX="${GCS_BUCKET_PREFIX}" \
+            -e MISTRAL_API_KEY="${MISTRAL_API_KEY}" \
+            "${DOCKER_IMAGE}"
