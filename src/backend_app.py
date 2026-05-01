@@ -421,57 +421,6 @@ def get_stations_between(path,stations):
             stations_concernes = [stations]
     return stations_concernes
 
-# def refuse_cookies(page):
-#     try:
-#         page.locator('button[id="popin_tc_privacy_button_3"]').click(timeout=2000)
-#         logger.info("Cookie banner accepted.")
-#     except Exception as e:
-#         logger.error("Cookie banner not found or could not be clicked:", str(e))
-
-# def get_page_content(sb,line_info,line_name,i):
-#     sb.goto(line_info["link"])
-#     if i==0:
-#         refuse_cookies(sb)
-#     sb.wait_for_selector("body", timeout=10000)
-#     logger.info(f"Page for line {line_name} loaded successfully.")
-#     return sb.content()
-
-# def scrape_data2(data,graphs):
-#     with sync_playwright() as p:
-#         browser = p.chromium.launch(headless=False) # slowmo=50
-#         context = browser.new_context(ignore_https_errors=True)
-#         page = context.new_page()
-#         for i,(line_name,line_info) in enumerate(data.items()):
-#             try:
-#                 page_source = get_page_content(page,line_info,line_name,i)
-#                 result = parse_construction_page(page_source,graphs[str(line_name)])
-#                 if result:
-#                     details, all_works = result
-#                     for j,construction_details in enumerate(details):
-#                         try:
-#                             create_ics_file(construction_details, DATA_FOLDER + "event_ics", f"event_ligne_{construction_details['summary']}_{j+1}")
-#                             details[j]["google_calendar"] = create_google_event(construction_details)
-#                         except Exception as e:
-#                             logger.info("L'event n'a pas pu être créé! Syntaxe incorrecte:", str(e))
-#                             logger.info("Construction details that caused the error:", construction_details)
-#                             # Retry with LLM feedback
-#                             fixed_details = retry_construction_detail_with_error(construction_details, e, all_works)
-#                             if fixed_details:
-#                                 try:
-#                                     create_ics_file(fixed_details, DATA_FOLDER + "event_ics", f"event_ligne_{fixed_details['summary']}_{j+1}")
-#                                     details[j] = fixed_details
-#                                     details[j]["google_calendar"] = create_google_event(fixed_details)
-#                                 except Exception as retry_error:
-#                                     logger.info(f"Retry failed for construction detail: {retry_error}")
-#                             else:
-#                                 logger.info(f"Could not fix construction detail via LLM retry. Skipping.")
-
-#                     data[line_name]["construction_list"] = details
-#             except Exception as e:
-#                 logger.info(f"Failed to process line {line_name}: {e}")
-#         context.close()
-#         browser.close()
-#         return data
     
 def scrape_data(data,graphs):
     # Use SeleniumBase in headless mode directly; do not rely on an external X display.
