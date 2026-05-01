@@ -1,11 +1,14 @@
 import os
 from pathlib import Path
 import json
-
+import logging
+from utils import is_running_in_docker, load_data_from_gcs, get_ics_from_gcs
 from datetime import datetime
 import streamlit as st
 from streamlit_calendar import calendar
 # import streamlit.components.v1 as components
+
+logger = logging.getLogger(__name__)
 
 if os.getenv('STREAMLIT_SERVER') == 'true':
     os.chdir("/mount/src/ratp_calendrier_travaux/src")
@@ -40,7 +43,7 @@ NUM_COLS = 1
 FIRST = True
 
 DATA_FOLDER = "../data"
-data_file_path = os.path.join(DATA_FOLDER, "data_20260426.json")
+data_file_path = os.path.join(DATA_FOLDER, "data.json")
 
 
 def filter_gare(gare,data): # ou construction_details union par ligne
@@ -123,16 +126,33 @@ def show_dl_buttons(line, construction_id, construction_summary,google_link,addi
     button_cols = st.columns([1,5])  # Create two columns for the buttons
     with button_cols[0]:
         ics_filename = f"event_ligne_{construction_summary}_{construction_id+1}.ics"
-        ics_file_path = os.path.join(DATA_FOLDER, "event_ics/", ics_filename)
-        if os.path.exists(ics_file_path):
-            with open(ics_file_path, "rb") as ics_file:
-                st.download_button(
-                                label="![Outlook](https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/Microsoft_Office_Outlook_%282018%E2%80%93present%29.svg/826px-Microsoft_Office_Outlook_%282018%E2%80%93present%29.svg.png) Ajouter à Outlook",
-                                data=ics_file,
-                                file_name=ics_filename,
-                                mime="text/calendar",
-                                key=f"ics_{line}_{construction_summary}_{construction_id}" + additional_key
-                            )
+        
+        if is_running_in_docker():
+            # Load from GCS when in Docker
+            bucket_name = os.getenv("GCS_BUCKET_NAME")
+            gcs_prefix = os.getenv("GCS_BUCKET_PREFIX", "ratp_travaux")
+            if bucket_name:
+                ics_content = get_ics_from_gcs(ics_filename, bucket_name, gcs_prefix)
+                if ics_content:
+                    st.download_button(
+                        label="![Outlook](https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/Microsoft_Office_Outlook_%282018%E2%80%93present%29.svg/826px-Microsoft_Office_Outlook_%282018%E2%80%93present%29.svg.png) Ajouter à Outlook",
+                        data=ics_content,
+                        file_name=ics_filename,
+                        mime="text/calendar",
+                        key=f"ics_{line}_{construction_summary}_{construction_id}" + additional_key
+                    )
+        else:
+            # Load from local folder when not in Docker
+            ics_file_path = os.path.join(DATA_FOLDER, "event_ics/", ics_filename)
+            if os.path.exists(ics_file_path):
+                with open(ics_file_path, "rb") as ics_file:
+                    st.download_button(
+                        label="![Outlook](https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/Microsoft_Office_Outlook_%282018%E2%80%93present%29.svg/826px-Microsoft_Office_Outlook_%282018%E2%80%93present%29.svg.png) Ajouter à Outlook",
+                        data=ics_file,
+                        file_name=ics_filename,
+                        mime="text/calendar",
+                        key=f"ics_{line}_{construction_summary}_{construction_id}" + additional_key
+                    )
 
     with button_cols[1]:
         if google_link:
@@ -168,10 +188,43 @@ def create_line_header(LINE_INFO, line, line_details):
     with col3:
         st.link_button("Page de référence RATP", line_details["link"],type="tertiary")
 
+
+def load_data():
+    """Load data from GCS if in Docker, else from local folder."""
+    if is_running_in_docker():
+        bucket_name = os.getenv("GCS_BUCKET_NAME")
+        gcs_prefix = os.getenv("GCS_BUCKET_PREFIX", "ratp_travaux")
+        if bucket_name:
+            data = load_data_from_gcs(bucket_name, gcs_prefix)
+            if data:
+                logger.info("Loaded data from GCS")
+                return data
+            else:
+                st.error("Failed to load data from GCS bucket. Check logs and env vars.")
+                return None
+        else:
+            st.error("GCS_BUCKET_NAME not set. Cannot load data in Docker environment.")
+            return None
+    else:
+        # Local mode: read from folder
+        try:
+            with open(data_file_path, "r") as f:
+                data = json.load(f)
+            logger.info(f"Loaded data from local folder: {data_file_path}")
+            return data
+        except FileNotFoundError:
+            st.error(f"Data file not found: {data_file_path}")
+            return None
+        except json.JSONDecodeError as e:
+            st.error(f"Invalid JSON in data file: {e}")
+            return None
+
+
 def main():
 
-    with open(data_file_path, "r") as f:
-        data = json.load(f)
+    data = load_data()
+    if data is None:
+        st.stop()
 
     if 'expand_all' not in st.session_state:
         st.session_state.expand_all = False

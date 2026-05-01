@@ -2,6 +2,7 @@
 import os
 import json
 import csv
+from pathlib import Path
 from bs4 import BeautifulSoup
 from icalendar import Calendar, Event
 from datetime import datetime
@@ -10,9 +11,7 @@ from litellm import completion
 import uuid
 import pandas as pd
 import logging
-# from playwright.sync_api import sync_playwright
-# import ssl
-# ssl._create_default_https_context = ssl._create_unverified_context
+from utils import is_running_in_docker
 
 load_dotenv()
 
@@ -24,21 +23,54 @@ from seleniumbase import SB
 DATE_FORMAT = "%Y%m%dT%H%M%S"
 DATA_FOLDER = "../data/"
 
-def is_running_in_docker() -> bool:
-    """Check if the code is running inside a Docker container."""
+
+def upload_outputs_to_gcs(data_file_path: str, ics_folder_path: str) -> None:
+    """Upload generated artifacts to GCS when running in Docker/Cloud Run."""
+    bucket_name = os.getenv("GCS_BUCKET_NAME")
+    if not bucket_name:
+        logger.warning("GCS_BUCKET_NAME not set. Skipping GCS upload.")
+        return
+
     try:
-        # Check for Docker-specific file
-        if os.path.exists('/.dockerenv'):
-            return True
-        
-        # Check cgroup for Docker
-        with open('/proc/1/cgroup', 'r') as f:
-            if 'docker' in f.read():
-                return True
-        
-        return False
-    except:
-        return False
+        from google.cloud import storage
+    except ImportError:
+        logger.error("google-cloud-storage is not installed. Skipping GCS upload.")
+        return
+
+    run_id = datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    gcs_prefix = os.getenv("GCS_BUCKET_PREFIX", "ratp_travaux").strip("/")
+    run_prefix = f"{gcs_prefix}/runs/{run_id}"
+
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+
+    # Upload snapshot JSON
+    data_filename = os.path.basename(data_file_path)
+    bucket.blob(f"{run_prefix}/{data_filename}").upload_from_filename(data_file_path)
+
+    # Upload ICS files for this run
+    ics_dir = Path(ics_folder_path)
+    if ics_dir.exists() and ics_dir.is_dir():
+        for ics_file in ics_dir.glob("*.ics"):
+            bucket.blob(f"{run_prefix}/event_ics/{ics_file.name}").upload_from_filename(str(ics_file))
+
+    # Write metadata for traceability
+    metadata = {
+        "run_id": run_id,
+        # "generated_at": datetime.now(datetime.timezone.utc).isoformat(timespec="seconds") + "Z",
+        # "data_file": data_filename,
+    }
+    # bucket.blob(f"{run_prefix}/metadata.json").upload_from_string(
+    #     json.dumps(metadata), content_type="application/json"
+    # )
+
+    # Update latest pointer for frontend readers
+    bucket.blob(f"{gcs_prefix}/latest.json").upload_from_string(
+        json.dumps(metadata), content_type="application/json"
+    )
+    logger.info(f"Uploaded run artifacts to gs://{bucket_name}/{run_prefix}")
+
+
 
 def get_llm_json_response(prompt,model="mistral/mistral-small-latest") -> str:
     # TODO: use Vertex when deployed in GCP ?
@@ -534,12 +566,14 @@ def main(generate_graphs=False,crawl_construction_data=True) -> None:
             
     
     logger.info(f"Found {len(data)} construction detail links. ")
+    data_output_path = None
     if crawl_construction_data:
         data = scrape_data(data,graphs)
         data = {k:v for k,v in data.items() if "construction_list" in v.keys()}
     
-        now = datetime.now().strftime("%Y%m%d")
-        with open(DATA_FOLDER + f"data_{now}.json", "w") as f:
+        # now = datetime.now().strftime("%Y%m%d")
+        data_output_path = DATA_FOLDER + f"data.json"
+        with open(data_output_path, "w") as f:
             json.dump(data,f)
     else:
         with open(DATA_FOLDER + "data.json", "r") as f:
@@ -548,9 +582,16 @@ def main(generate_graphs=False,crawl_construction_data=True) -> None:
             for work in details["construction_list"]:
                 work["stations_concernes"] = get_stations_between(paths[line],work["stations"])
                 
-        now = datetime.now().strftime("%Y%m%d")
-        with open(DATA_FOLDER + f"data_{now}.json", "w", encoding="utf-8") as f:
+        # now = datetime.now().strftime("%Y%m%d")
+        data_output_path = DATA_FOLDER + f"data.json"
+        with open(data_output_path, "w", encoding="utf-8") as f:
             json.dump(data,f, ensure_ascii=False)
+
+    if is_running_in_docker() and data_output_path:
+        upload_outputs_to_gcs(
+            data_file_path=data_output_path,
+            ics_folder_path=DATA_FOLDER + "event_ics",
+        )
             
     logger.info("Finished")
 
