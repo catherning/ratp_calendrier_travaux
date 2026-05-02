@@ -124,3 +124,11 @@ Feel free to submit issues or pull requests for improvements or bug fixes. The c
   -  Clean up pyproject.toml: remove python-certifi-win32 (Windows-only), pyautogui (unused), mistral-inference (pulls local model weights but only API is used); add pandas as an explicit dependency; move ipykernel/pytest/pytest-playwright to [project.optional-dependencies.dev]
   -  Clean up data/ folder: remove or archive old data_YYYYMMDD.json files; establish a clear naming convention; remove committed .ics files that should be gitignored
   -  Fix README.md: update file paths (src/backend_app.py, src/streamlit_app.py), fix lockfile name (uv.lock not pyproject.lock), and update run commands accordingly
+
+
+  ### To Terraform
+  - Storage `gcloud storage buckets create gs://ratp-travaux-gcs \
+    --default-storage-class=STANDARD \
+    --location=US-EAST1 \
+    --uniform-bucket-level-access \
+    --public-access-prevention`
