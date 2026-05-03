@@ -37,24 +37,24 @@ jobs:
           [[ -f "${DEPLOY_CONFIG_PATH}" ]] || { echo "Missing deploy config: ${DEPLOY_CONFIG_PATH}"; exit 1; }
 
           python3 - "${DEPLOY_CONFIG_PATH}" >> "$GITHUB_OUTPUT" <<'PY'
-            import json
-            import sys
+          import json
+          import sys
 
-            config_path = sys.argv[1]
-            with open(config_path, "r", encoding="utf-8") as handle:
-                config = json.load(handle)
+          config_path = sys.argv[1]
+          with open(config_path, "r", encoding="utf-8") as handle:
+              config = json.load(handle)
 
-            outputs = {
-                "project_id": config["projectId"],
-                "region": config["region"],
-                "workload_identity_provider": config["githubActions"]["workloadIdentityProvider"],
-                "deployer_service_account": config["githubActions"]["deployerServiceAccount"],
-                "job_name": config["cloudRunJob"]["name"],
-                "scheduler_name": config["cloudScheduler"]["name"],
-            }
+          outputs = {
+              "project_id": config["projectId"],
+              "region": config["region"],
+              "workload_identity_provider": config["githubActions"]["workloadIdentityProvider"],
+              "deployer_service_account": config["githubActions"]["deployerServiceAccount"],
+              "job_name": config["cloudRunJob"]["name"],
+              "scheduler_name": config["cloudScheduler"]["name"],
+          }
 
-            for key, value in outputs.items():
-                print(f"{key}={value}")
+          for key, value in outputs.items():
+              print(f"{key}={value}")
             PY
 
       - name: Validate required configuration
