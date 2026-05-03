@@ -75,7 +75,7 @@ def upload_outputs_to_gcs(data_file_path: str, ics_folder_path: str) -> None:
     gcs_prefix = os.getenv("GCS_BUCKET_PREFIX", "ratp_travaux").strip("/")
     run_prefix = f"{gcs_prefix}/runs/{run_id}"
 
-    client = storage.Client()
+    client = storage.Client(project=os.getenv("GCP_PROJECT_ID"))
     bucket = client.bucket(bucket_name)
 
     # Upload snapshot JSON
@@ -188,9 +188,9 @@ def parse_construction_page(source_text,path):
     page_title = ""
     if soup.title and soup.title.string:
         page_title = soup.title.string.strip()
-    if is_cloudflare_challenge_page(source_text, page_title):
-        logger.warning("Cloudflare challenge page detected; content not available for parsing.")
-        return None
+    # if is_cloudflare_challenge_page(source_text, page_title):
+    #     logger.warning("Cloudflare challenge page detected; content not available for parsing.")
+    #     return None
 
     all_works = ""
 
@@ -552,31 +552,31 @@ def scrape_data(data,graphs):
                 logger.error("Failed to load the main page: %s", e)
 
             # Retry a few times if an anti-bot interstitial is returned instead of content.
-            page_source = ""
-            for attempt in range(3):
-                page_source = sb.get_page_source()
-                page_title = ""
-                try:
-                    page_title = sb.get_title()
-                except Exception:
-                    pass
+            # page_source = ""
+            # for attempt in range(3):
+            page_source = sb.get_page_source()
+            #     page_title = ""
+            #     try:
+            #         page_title = sb.get_title()
+            #     except Exception:
+            #         pass
 
-                if not is_cloudflare_challenge_page(page_source, page_title):
-                    break
+            #     if not is_cloudflare_challenge_page(page_source, page_title):
+            #         break
 
-                logger.warning(
-                    "Cloudflare challenge detected for line %s (attempt %s/3). Retrying...",
-                    line_name,
-                    attempt + 1,
-                )
-                try:
-                    sb.uc_open_with_reconnect(line_info["link"], reconnect_time=8)
-                except Exception:
-                    sb.uc_open(line_info["link"])
+            #     logger.warning(
+            #         "Cloudflare challenge detected for line %s (attempt %s/3). Retrying...",
+            #         line_name,
+            #         attempt + 1,
+            #     )
+            #     try:
+            #         sb.uc_open_with_reconnect(line_info["link"], reconnect_time=8)
+            #     except Exception:
+            #         sb.uc_open(line_info["link"])
 
-            if is_cloudflare_challenge_page(page_source, page_title):
-                logger.error("Skipping line %s due to persistent Cloudflare challenge.", line_name)
-                continue
+            # if is_cloudflare_challenge_page(page_source, page_title):
+            #     logger.error("Skipping line %s due to persistent Cloudflare challenge.", line_name)
+            #     continue
 
             result = parse_construction_page(page_source,graphs[str(line_name)])
 
