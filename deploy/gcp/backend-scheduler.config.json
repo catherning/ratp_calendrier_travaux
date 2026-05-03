@@ -1,0 +1,14 @@
+{
+  "projectId": "ratp-calendrier-travaux",
+  "region": "us-east1",
+  "githubActions": {
+    "workloadIdentityProvider": "projects/123456789012/locations/global/workloadIdentityPools/github/providers/ratp-calendrier-travaux",
+    "deployerServiceAccount": "github-actions-deployer@all-projects-494721.iam.gserviceaccount.com"
+  },
+  "cloudScheduler": {
+    "name": "ratp-backend-scrape-weekly",
+    "cron": "0 7 * * 0",
+    "timeZone": "Etc/UTC",
+    "serviceAccount": "ratp-travaux-backend-sa@all-projects-494721.iam.gserviceaccount.com"
+  }
+}

@@ -1,28 +1,27 @@
-name: Deploy Cloud Run Job
+name: Configure Cloud Scheduler
 
 on:
   workflow_dispatch:
   push:
     branches:
       - "station_filtering"
-    # Only runs when the image/code pipeline pushes a new DOCKER_IMAGE.
-    # Schedule and infra config changes are handled by configure-cloud-scheduler.yml.
+    paths:
+      - "deploy/gcp/backend-scheduler.config.json"
 
 permissions:
   contents: read
   id-token: write
 
 concurrency:
-  group: deploy-backend-scrape
+  group: configure-cloud-scheduler
   cancel-in-progress: false
 
 jobs:
-  deploy-cloud-run-job:
+  configure-cloud-scheduler:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     env:
-      DOCKER_IMAGE: ${{ vars.DOCKER_IMAGE }}
-      DEPLOY_CONFIG_PATH: deploy/gcp/backend-scrape.config.json
+      DEPLOY_CONFIG_PATH: deploy/gcp/backend-scheduler.config.json
 
     steps:
       - name: Checkout
@@ -49,23 +48,12 @@ jobs:
                 "region": config["region"],
                 "workload_identity_provider": config["githubActions"]["workloadIdentityProvider"],
                 "deployer_service_account": config["githubActions"]["deployerServiceAccount"],
-                "job_name": config["cloudRunJob"]["name"],
                 "scheduler_name": config["cloudScheduler"]["name"],
             }
 
             for key, value in outputs.items():
                 print(f"{key}={value}")
-            PY
-
-      - name: Validate required configuration
-        shell: bash
-        run: |
-          set -euo pipefail
-          [[ -n "${DOCKER_IMAGE}" ]] || { echo "Missing repo var: DOCKER_IMAGE"; exit 1; }
-          [[ -n "${{ steps.config.outputs.project_id }}" ]] || { echo "Missing config value: projectId"; exit 1; }
-          [[ -n "${{ steps.config.outputs.region }}" ]] || { echo "Missing config value: region"; exit 1; }
-          [[ -n "${{ steps.config.outputs.workload_identity_provider }}" ]] || { echo "Missing config value: githubActions.workloadIdentityProvider"; exit 1; }
-          [[ -n "${{ steps.config.outputs.deployer_service_account }}" ]] || { echo "Missing config value: githubActions.deployerServiceAccount"; exit 1; }
+          PY
 
       - id: auth
         name: Authenticate to Google Cloud (WIF)
@@ -80,8 +68,8 @@ jobs:
         with:
           project_id: ${{ steps.config.outputs.project_id }}
 
-      - name: Deploy Cloud Run job
+      - name: Configure Cloud Scheduler
         shell: bash
         run: |
           set -euo pipefail
-          bash scripts/deploy_cloud_run_job.sh "${DEPLOY_CONFIG_PATH}" "${DOCKER_IMAGE}"
+          bash scripts/configure_cloud_scheduler.sh "${DEPLOY_CONFIG_PATH}"

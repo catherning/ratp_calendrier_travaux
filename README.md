@@ -67,6 +67,44 @@ TODO:
 - After running the backend application, the `data/data.json` file will be populated with construction details.
 - Open the Streamlit app in your web browser to view the construction details, download ICS files, and access Google Calendar links.
 
+## Run The Scraper With Cloud Run Jobs
+
+The GitHub Actions workflow now deploys the scraper as a Cloud Run Job and configures a Cloud Scheduler HTTP trigger for recurring executions. GitHub Actions no longer runs the scraper container itself on a hosted runner.
+
+The stable GCP resource settings are versioned in [deploy/gcp/backend-scrape.config.json](/home/kaprime/Perso/ratp_calendrier_travaux/deploy/gcp/backend-scrape.config.json). Replace the `REPLACE_ME_*` placeholders in that file with your real project values. The workflow calls [scripts/deploy_backend_scrape_job.sh](/home/kaprime/Perso/ratp_calendrier_travaux/scripts/deploy_backend_scrape_job.sh), which reads that config and applies the Cloud Run Job and Cloud Scheduler changes with `gcloud`.
+
+Required GitHub repository variables:
+
+- `DOCKER_IMAGE`: Full container image reference used by Cloud Run Job.
+
+Resource names, service accounts, region, schedule, bucket, and Secret Manager secret name now live in the versioned deploy config instead of GitHub repository variables.
+
+Required GCP IAM and services:
+
+- Enable `run.googleapis.com`, `cloudscheduler.googleapis.com`, `secretmanager.googleapis.com`, and `storage.googleapis.com`.
+- Grant the GitHub deployment service account permissions to manage Cloud Run Jobs and Cloud Scheduler.
+- Grant the Cloud Run runtime service account read access to the Secret Manager secret and write access to the GCS bucket.
+- Grant the Cloud Scheduler service account permission to run the Cloud Run Job.
+
+The scheduler triggers the Cloud Run Jobs API endpoint:
+
+```text
+POST https://run.googleapis.com/v2/projects/$GCP_PROJECT_ID/locations/$GCP_REGION/jobs/$CLOUD_RUN_JOB_NAME:run
+```
+
+This keeps the recurring execution inside GCP while still letting GitHub Actions manage deployment updates.
+
+### Why Use A Script Instead Of Embedding All `gcloud` Commands In The Workflow
+
+For this stage, a versioned config file plus a small deployment script is the better split.
+
+- The workflow stays focused on CI concerns: checkout, auth, and invoking deployment.
+- The deploy logic is reusable from GitHub Actions, local terminals, or later from another automation system.
+- The resource definitions are centralized in one file instead of being spread across many GitHub variables.
+- When you move to Terraform, the script and JSON config are easier to replace than a large workflow full of imperative `gcloud` commands.
+
+The tradeoff is that `gcloud` in a script is still imperative state management. Terraform is still the better end state once you want drift detection, previews, and broader infra ownership.
+
 ## Contributing
 
 Feel free to submit issues or pull requests for improvements or bug fixes. The code is not clean and it's mainly a PoC.

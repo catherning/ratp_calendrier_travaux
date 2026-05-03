@@ -1,0 +1,24 @@
+{
+  "projectId": "ratp-calendrier-travaux",
+  "region": "us-east1",
+  "githubActions": {
+    "workloadIdentityProvider": "projects/123456789012/locations/global/workloadIdentityPools/github/providers/ratp-calendrier-travaux",
+    "deployerServiceAccount": "github-actions-deployer@all-projects-494721.iam.gserviceaccount.com"
+  },
+  "cloudRunJob": {
+    "name": "ratp-backend-scrape",
+    "serviceAccount": "ratp-travaux-backend-sa@all-projects-494721.iam.gserviceaccount.com",
+    "cpu": "1",
+    "memory": "2Gi",
+    "taskTimeout": "3600s",
+    "tasks": 1,
+    "parallelism": 1,
+    "maxRetries": 0
+  },
+  "gcs": {
+    "bucketName": "ratp-travaux-gcs"
+  },
+  "secrets": {
+    "MISTRAL_SECRET_NAME": "MISTRAL_SECRET_NAME"
+  }
+}
