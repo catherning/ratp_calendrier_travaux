@@ -151,15 +151,27 @@ def parse_construction_page(source_text,path):
     """Parses a single construction page to extract dates, stations, and descriptions. """
     soup = BeautifulSoup(source_text, 'html.parser')
 
+    all_works = ""
 
-    try:
-        if "pas de travaux" in soup.find('div', class_='article__accroche-content').text:
+    accroche_div = soup.find('div', class_='article__accroche-content')
+    if accroche_div is not None:
+        accroche_text = accroche_div.get_text(" ", strip=True).lower()
+        if "pas de travaux" in accroche_text:
             return None
-        all_works = " ||| ".join([text.get_text(strip=True) for text in soup.find_all("div",class_="squeezecnt")])
-    except AttributeError:
-        logger.error("Could not find the expected div with class 'article__accroche-content'. Trying bonjour-ratp structure.")
-        # Expect bonjour ratp pages to have construction works listed
-        all_works = soup.find('div', class_='er2njhn h1hztsyi').text
+
+        squeezed_blocks = [text.get_text(strip=True) for text in soup.find_all("div", class_="squeezecnt")]
+        all_works = " ||| ".join(squeezed_blocks).strip()
+    else:
+        logger.warning("Could not find expected RATP structure. Trying bonjour-ratp structure.")
+
+    if not all_works:
+        bonjour_container = soup.select_one("div.er2njhn.h1hztsyi")
+        if bonjour_container is not None:
+            all_works = bonjour_container.get_text(" ", strip=True)
+
+    if not all_works:
+        logger.error("Could not extract construction content from page; skipping this line.")
+        return None
 
     # Prompt compact, mais strict sur le format pour stabiliser la sortie du LLM.
     prompt = (

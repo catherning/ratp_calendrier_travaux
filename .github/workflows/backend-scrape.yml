@@ -23,7 +23,6 @@ jobs:
     timeout-minutes: 60
     env:
       # Configure these as repository variables
-      DOCKER_IMAGE: ${{ vars.DOCKER_IMAGE }}
       GCS_BUCKET_NAME: ${{ vars.GCS_BUCKET_NAME }}
       GCS_BUCKET_PREFIX: ${{ vars.GCS_BUCKET_PREFIX }}
 
@@ -35,8 +34,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ -n "${DOCKER_IMAGE}" ]] || { echo "Missing repo var: DOCKER_IMAGE"; exit 1; }
           [[ -n "${GCS_BUCKET_NAME}" ]] || { echo "Missing repo var: GCS_BUCKET_NAME"; exit 1; }
+
+      - id: image
+        name: Build backend image
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOCAL_IMAGE="backend-scrape:${GITHUB_SHA}"
+          docker build -t "${LOCAL_IMAGE}" .
+          echo "image=${LOCAL_IMAGE}" >> "$GITHUB_OUTPUT"
       - id: auth
         name: Authenticate to Google Cloud (WIF)
         uses: google-github-actions/auth@v3
@@ -44,9 +51,6 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           create_credentials_file: true
-
-      - name: Pull Docker image
-        run: docker pull "${DOCKER_IMAGE}"
 
       - name: Run backend container
         shell: bash
@@ -62,4 +66,4 @@ jobs:
             -e GCS_BUCKET_NAME="${GCS_BUCKET_NAME}" \
             -e GCS_BUCKET_PREFIX="${GCS_BUCKET_PREFIX}" \
             -e MISTRAL_API_KEY="${MISTRAL_API_KEY}" \
-            "${DOCKER_IMAGE}"
+            "${{ steps.image.outputs.image }}"
