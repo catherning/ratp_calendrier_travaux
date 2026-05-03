@@ -460,23 +460,24 @@ def scrape_data(data,graphs):
         
         first_bonjour_ratp_page = True
         for i,(line_name,line_info) in enumerate(data.items()):
+            logger.info(f"Processing line {line_name} with URL: {line_info['link']} ")
             sb.uc_open(line_info["link"])
 
             # Handle the cookie banner
             if i==0:
                 try:
-                    sb.wait_for_element('button[id="popin_tc_privacy_button_3"]', timeout=2)
+                    sb.wait_for_element('button[id="popin_tc_privacy_button_3"]', timeout=5)
                     sb.uc_click('button[id="popin_tc_privacy_button_3"]')
                     logger.info("Cookie banner accepted. ")
                 except Exception as e:
-                    logger.error("Cookie banner not found or could not be clicked:", str(e))
+                    logger.warning("Cookie banner not found or could not be clicked: %s", e)
             elif "bonjour-ratp" in line_info["link"] and first_bonjour_ratp_page:
                 try:
-                    sb.wait_for_element('button[id="didomi-notice-agree-button"]', timeout=2000)
+                    sb.wait_for_element('button[id="didomi-notice-agree-button"]', timeout=5)
                     sb.uc_click('button[id="didomi-notice-agree-button"]')
                     logger.info("Cookie banner accepted. ")
                 except Exception as e:
-                    logger.error("Cookie banner not found or could not be clicked:", str(e))
+                    logger.warning("Cookie banner not found or could not be clicked: %s", e)
                 first_bonjour_ratp_page = False
 
             # Ensure the page is fully loaded
@@ -484,7 +485,7 @@ def scrape_data(data,graphs):
                 sb.wait_for_element("body", timeout=10)
                 logger.info(f"Page for line {line_name} loaded successfully. ")
             except Exception as e:
-                logger.error("Failed to load the main page:", str(e))
+                logger.error("Failed to load the main page: %s", e)
 
             # Extract the page source and parse it with BeautifulSoup
             page_source = sb.get_page_source()
@@ -500,8 +501,8 @@ def scrape_data(data,graphs):
                         create_ics_file(construction_details, DATA_FOLDER + "event_ics", f"event_ligne_{construction_details['summary']}_{j+1}")
                         details[j]["google_calendar"] = create_google_event(construction_details)
                     except Exception as e:
-                        logger.error("L'event n'a pas pu être créé! Syntaxe incorrecte:", str(e))
-                        logger.error("Construction details that caused the error:", construction_details)
+                        logger.error("L'event n'a pas pu être créé! Syntaxe incorrecte: %s", e)
+                        logger.error("Construction details that caused the error: %s", construction_details)
                         # Retry with LLM feedback
                         fixed_details = retry_construction_detail_with_error(construction_details, e, all_works)
                         if fixed_details:
