@@ -2,11 +2,11 @@ name: Configure Cloud Scheduler
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - "station_filtering"
-    paths:
-      - "deploy/gcp/backend-scheduler.config.json"
+  # push:
+  #   branches:
+  #     - "station_filtering"
+  #   paths:
+  #     - "deploy/gcp/backend-scheduler.config.json"
 
 permissions:
   contents: read

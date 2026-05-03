@@ -37,12 +37,16 @@ required_paths = {
     "JOB_PARALLELISM":  ("cloudRunJob", "parallelism"),
     "JOB_MAX_RETRIES":  ("cloudRunJob", "maxRetries"),
     "GCS_BUCKET_NAME":  ("gcs", "bucketName"),
-    "GCS_BUCKET_PREFIX":("gcs", "bucketPrefix"),
-    "MISTRAL_SECRET_NAME": ("secrets", "MISTRAL_SECRET_NAME"),
+    "MISTRAL_API_KEY": ("secrets", "MISTRAL_API_KEY"),
 }
 
 optional_paths = {
     "JOB_SERVICE_ACCOUNT": ("cloudRunJob", "serviceAccount"),
+    "GCS_BUCKET_PREFIX": ("gcs", "bucketPrefix"),
+    "SCRAPER_PROXY_SECRET": ("secrets", "SCRAPER_PROXY"),
+    "CF_MAX_RETRIES": ("runtime", "cloudflareMaxRetries"),
+    "CF_RECONNECT_SECONDS": ("runtime", "cloudflareReconnectSeconds"),
+    "CF_BACKOFF_SECONDS": ("runtime", "cloudflareBackoffSeconds"),
 }
 
 def lookup(path):
@@ -99,9 +103,17 @@ run_args=(
     --cpu "${JOB_CPU}"
     --memory "${JOB_MEMORY}"
     --task-timeout "${JOB_TIMEOUT}"
-    --set-env-vars "GCS_BUCKET_NAME=${GCS_BUCKET_NAME},GCS_BUCKET_PREFIX=${GCS_BUCKET_PREFIX}"
-    --set-secrets "MISTRAL_API_KEY=${MISTRAL_SECRET_NAME}:latest"
 )
+
+env_bindings=("GCS_BUCKET_NAME=${GCS_BUCKET_NAME}")
+if [[ -n "${GCS_BUCKET_PREFIX}" ]]; then
+    env_bindings+=("GCS_BUCKET_PREFIX=${GCS_BUCKET_PREFIX}")
+fi
+
+secret_bindings=("MISTRAL_API_KEY=${MISTRAL_API_KEY}:latest")
+
+run_args+=(--set-env-vars "$(IFS=,; echo "${env_bindings[*]}")")
+run_args+=(--set-secrets "$(IFS=,; echo "${secret_bindings[*]}")")
 
 if [[ -n "${JOB_SERVICE_ACCOUNT}" ]]; then
     run_args+=(--service-account "${JOB_SERVICE_ACCOUNT}")

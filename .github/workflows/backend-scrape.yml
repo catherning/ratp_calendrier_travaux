@@ -2,11 +2,10 @@ name: Deploy Cloud Run Job
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - "station_filtering"
+  # push:
+  #   branches:
+  #     - "station_filtering"
     # Only runs when the image/code pipeline pushes a new DOCKER_IMAGE.
-    # Schedule and infra config changes are handled by configure-cloud-scheduler.yml.
 
 permissions:
   contents: read

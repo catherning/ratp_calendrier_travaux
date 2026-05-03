@@ -121,6 +121,7 @@ Feel free to submit issues or pull requests for improvements or bug fixes. The c
 - Add backend cron to update the folder with data every week
 - Revamp front: change from streamlit? 
 - CICD ?
+- Use https://www.browserless.io/blog/modern-python-scraping-browserless-ai to bypass Cloudflare when deploying backend to cloud
 - Add Second LLM to check first LLM response is ok ?
 - Check accessibility
 - Expose API endpoint on construction work? only if there's other use cases

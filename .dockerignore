@@ -3,3 +3,4 @@ data/event_ics/
 .env
 downloaded_files/
 __pycache__/
+gcloud_creds.json

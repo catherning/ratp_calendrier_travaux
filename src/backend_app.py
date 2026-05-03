@@ -5,7 +5,8 @@ import csv
 from pathlib import Path
 from bs4 import BeautifulSoup
 from icalendar import Calendar, Event
-from datetime import datetime
+import datetime as dt
+# from datetime import datetime
 from dotenv import load_dotenv
 from litellm import completion
 import uuid
@@ -70,7 +71,7 @@ def upload_outputs_to_gcs(data_file_path: str, ics_folder_path: str) -> None:
         logger.error("google-cloud-storage is not installed. Skipping GCS upload.")
         return
 
-    run_id = datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_id = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     gcs_prefix = os.getenv("GCS_BUCKET_PREFIX", "ratp_travaux").strip("/")
     run_prefix = f"{gcs_prefix}/runs/{run_id}"
 
@@ -90,7 +91,7 @@ def upload_outputs_to_gcs(data_file_path: str, ics_folder_path: str) -> None:
     # Write metadata for traceability
     metadata = {
         "run_id": run_id,
-        # "generated_at": datetime.now(datetime.timezone.utc).isoformat(timespec="seconds") + "Z",
+        # "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds") + "Z",
         # "data_file": data_filename,
     }
     # bucket.blob(f"{run_prefix}/metadata.json").upload_from_string(
@@ -230,7 +231,8 @@ def parse_construction_page(source_text,path):
         "- liste de stations => separees par virgule ',' ; "
         "- entre 2 stations => separees par ' | '. "
         "Si recurrence utile, ajoute rrule (objet) avec uniquement ces cles possibles: "
-        "freq (daily|weekly), byday (SU,MO,TU,WE,TH,FR,SA sans espaces), interval (int), until (datetime), count (int). "
+        "freq (daily|weekly), byday (SU,MO,TU,WE,TH,FR,SA sans espaces), interval (int), until (datetime) OU count (int). "
+        "On ne peut avoir que until ou count, pas les deux."
         "Ne jamais utiliser la cle BYWEEKDAY. "
         "Si frequence non reguliere, cree plusieurs evenements plutot qu'une rrule incorrecte. "
         "Essaie de minimiser le nombre d'evenements en fusionnant les plages compatibles. "
@@ -281,10 +283,10 @@ def create_ics_file(construction_details, output_folder,filename) -> None:
     c.add("prodid","-//Test RATP travaux//FR")         # Date the event was created (required)
     c.add("version","2.0")         # Date the event was created (required)
     e.add("summary",construction_details["summary"])
-    e.add("dtstart",datetime.strptime(construction_details["date_debut"],DATE_FORMAT))
+    e.add("dtstart",dt.datetime.strptime(construction_details["date_debut"],DATE_FORMAT))
     # e.description = f"Stations affected: {construction_details['stations']}"
     e.add("uid",uuid.uuid4())          # Unique identifier (required)
-    e.add("dtstamp",datetime.now()  )         # Date the event was created (required)
+    e.add("dtstamp",dt.datetime.now()  )         # Date the event was created (required)
     e.add("vtimezone","Europe/Paris")
     
     if "rrule" in construction_details.keys(): 
@@ -296,12 +298,12 @@ def create_ics_file(construction_details, output_folder,filename) -> None:
         rule = construction_details["rrule"].copy()
         rule["byday"] = rule["byday"].split(",") 
         try:
-            rule["until"]=datetime.strptime(rule["until"],DATE_FORMAT)
+            rule["until"]=dt.datetime.strptime(rule["until"],DATE_FORMAT)
         except KeyError:
             pass
         e.add('rrule', rule)
     else:
-        e.add("dtend",datetime.strptime(construction_details["date_fin"],DATE_FORMAT))
+        e.add("dtend",dt.datetime.strptime(construction_details["date_fin"],DATE_FORMAT))
 
     c.add_component(e)
 
@@ -610,9 +612,9 @@ def scrape_data(data,graphs):
 def main(generate_graphs=False,crawl_construction_data=True) -> None:
     # TODO: tester les pages au format https://www.bonjour-ratp.fr/actualites/articles/bulletin-travaux-25-avril/
     # et https://www.ratp.fr/les-travaux-en-cours-et-a-venir
-    # data = {}
-    data = {i:{"link":f"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/metro-ligne-{i}-travaux"} for i in range(1, 15)}
-    data["A"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-a-travaux"}
+    data = {}
+    # data = {i:{"link":f"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/metro-ligne-{i}-travaux"} for i in range(1, 15)}
+    # data["A"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-a-travaux"}
     data["B"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-b-travaux"}
     data["C"] = {"link":"https://www.bonjour-ratp.fr/actualites/articles/ligne-rerc-dates-et-horaires-des-fermetures/"}
     data["D"] = {"link":"https://www.bonjour-ratp.fr/actualites/articles/ligne-rerd-dates-et-horaires-des-fermetures/"}

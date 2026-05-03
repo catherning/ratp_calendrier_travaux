@@ -1,0 +1,22 @@
+name: ratp-travaux
+
+services:
+  backend-scrape:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ratp-travaux-backend:test
+    container_name: ratp-backend-scrape
+
+    # Persist generated JSON/ICS on the host.
+    volumes:
+      - ./data:/data
+      - ./gcloud_creds.json:/secrets/gcloud_creds.json:ro
+
+    env_file:
+      - ./.env
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcloud_creds.json
+
+    shm_size: "1gb"
+    restart: "no"
