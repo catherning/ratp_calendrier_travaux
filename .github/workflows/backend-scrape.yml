@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 60
     env:
       # Configure these as repository variables
+      DOCKER_IMAGE: ${{ vars.DOCKER_IMAGE }}
       GCS_BUCKET_NAME: ${{ vars.GCS_BUCKET_NAME }}
       GCS_BUCKET_PREFIX: ${{ vars.GCS_BUCKET_PREFIX }}
 
@@ -34,16 +35,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          [[ -n "${DOCKER_IMAGE}" ]] || { echo "Missing repo var: DOCKER_IMAGE"; exit 1; }
           [[ -n "${GCS_BUCKET_NAME}" ]] || { echo "Missing repo var: GCS_BUCKET_NAME"; exit 1; }
 
       - id: image
-        name: Build backend image
+        name: Resolve backend image
         shell: bash
         run: |
           set -euo pipefail
-          LOCAL_IMAGE="backend-scrape:${GITHUB_SHA}"
-          docker build -t "${LOCAL_IMAGE}" .
-          echo "image=${LOCAL_IMAGE}" >> "$GITHUB_OUTPUT"
+          if [[ -n "${DOCKER_IMAGE}" ]]; then
+            docker pull "${DOCKER_IMAGE}"
+            echo "image=${DOCKER_IMAGE}" >> "$GITHUB_OUTPUT"
+          else
+            LOCAL_IMAGE="backend-scrape:${GITHUB_SHA}"
+            docker build -t "${LOCAL_IMAGE}" .
+            echo "image=${LOCAL_IMAGE}" >> "$GITHUB_OUTPUT"
+          fi
       - id: auth
         name: Authenticate to Google Cloud (WIF)
         uses: google-github-actions/auth@v3

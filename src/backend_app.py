@@ -24,6 +24,39 @@ DATE_FORMAT = "%Y%m%dT%H%M%S"
 DATA_FOLDER = "../data/"
 
 
+def is_cloudflare_challenge_page(page_source: str, page_title: str = "") -> bool:
+    """Detect Cloudflare interstitial/challenge pages that contain no business content."""
+    lowered = (page_source or "").lower()
+    title_lower = (page_title or "").lower()
+    markers = [
+        "just a moment",
+        "challenges.cloudflare.com",
+        "cdn-cgi/challenge-platform",
+        "enable javascript and cookies to continue",
+        "cf_chl_",
+    ]
+    return any(marker in lowered for marker in markers) or "just a moment" in title_lower
+
+
+def extract_generic_works_text(soup: BeautifulSoup) -> str:
+    """Fallback extractor for pages where expected class names changed."""
+    candidates = []
+    for selector in ["main", "article", "section", "[role='main']"]:
+        for node in soup.select(selector):
+            text = node.get_text(" ", strip=True)
+            if len(text) < 80:
+                continue
+            text_lower = text.lower()
+            if any(term in text_lower for term in ["travaux", "fermeture", "interruption", "circule"]):
+                candidates.append(text)
+
+    if not candidates:
+        return ""
+
+    # Keep the most informative block and cap prompt size.
+    return max(candidates, key=len)[:8000]
+
+
 def upload_outputs_to_gcs(data_file_path: str, ics_folder_path: str) -> None:
     """Upload generated artifacts to GCS when running in Docker/Cloud Run."""
     bucket_name = os.getenv("GCS_BUCKET_NAME")
@@ -151,6 +184,13 @@ def parse_construction_page(source_text,path):
     """Parses a single construction page to extract dates, stations, and descriptions. """
     soup = BeautifulSoup(source_text, 'html.parser')
 
+    page_title = ""
+    if soup.title and soup.title.string:
+        page_title = soup.title.string.strip()
+    if is_cloudflare_challenge_page(source_text, page_title):
+        logger.warning("Cloudflare challenge page detected; content not available for parsing.")
+        return None
+
     all_works = ""
 
     accroche_div = soup.find('div', class_='article__accroche-content')
@@ -168,6 +208,11 @@ def parse_construction_page(source_text,path):
         bonjour_container = soup.select_one("div.er2njhn.h1hztsyi")
         if bonjour_container is not None:
             all_works = bonjour_container.get_text(" ", strip=True)
+
+    if not all_works:
+        all_works = extract_generic_works_text(soup)
+        if all_works:
+            logger.info("Using generic page-content fallback extraction.")
 
     if not all_works:
         logger.error("Could not extract construction content from page; skipping this line.")
@@ -473,7 +518,12 @@ def scrape_data(data,graphs):
         first_bonjour_ratp_page = True
         for i,(line_name,line_info) in enumerate(data.items()):
             logger.info(f"Processing line {line_name} with URL: {line_info['link']} ")
-            sb.uc_open(line_info["link"])
+
+            # Cloudflare can occasionally present a challenge in CI. UC reconnect improves success rate.
+            try:
+                sb.uc_open_with_reconnect(line_info["link"], reconnect_time=6)
+            except Exception:
+                sb.uc_open(line_info["link"])
 
             # Handle the cookie banner
             if i==0:
@@ -499,8 +549,32 @@ def scrape_data(data,graphs):
             except Exception as e:
                 logger.error("Failed to load the main page: %s", e)
 
-            # Extract the page source and parse it with BeautifulSoup
-            page_source = sb.get_page_source()
+            # Retry a few times if an anti-bot interstitial is returned instead of content.
+            page_source = ""
+            for attempt in range(3):
+                page_source = sb.get_page_source()
+                page_title = ""
+                try:
+                    page_title = sb.get_title()
+                except Exception:
+                    pass
+
+                if not is_cloudflare_challenge_page(page_source, page_title):
+                    break
+
+                logger.warning(
+                    "Cloudflare challenge detected for line %s (attempt %s/3). Retrying...",
+                    line_name,
+                    attempt + 1,
+                )
+                try:
+                    sb.uc_open_with_reconnect(line_info["link"], reconnect_time=8)
+                except Exception:
+                    sb.uc_open(line_info["link"])
+
+            if is_cloudflare_challenge_page(page_source, page_title):
+                logger.error("Skipping line %s due to persistent Cloudflare challenge.", line_name)
+                continue
 
             result = parse_construction_page(page_source,graphs[str(line_name)])
 
