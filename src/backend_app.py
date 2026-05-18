@@ -326,12 +326,7 @@ def create_google_event(construction_details) -> str:
             url+= f";INTERVAL%3D{rule['interval']}"
     return url
 
-    
-def get_stations_graph_by_line(route_name,routes,trips,stop_times,stops):
-
-    """Récupère le graphe des stations pour une ligne donnée (ex: 'M1' pour la ligne 1)"""
-   
-    # 1. Trouver l'ID de la ligne
+def get_route_id(route_name,routes):
     if route_name.isnumeric():
         agency = "IDFM:Operator_100" # RATP
     else:
@@ -342,6 +337,15 @@ def get_stations_graph_by_line(route_name,routes,trips,stop_times,stops):
         return f"Ligne {route_name} non trouvée."
    
     route_id = route_id[0]
+
+    return route_id 
+
+def get_stations_graph_by_line(route_name,routes,trips,stop_times,stops):
+
+    """Récupère le graphe des stations pour une ligne donnée (ex: 'M1' pour la ligne 1)"""
+   
+    # 1. Trouver l'ID de la ligne
+    route_id = get_route_id(route_name,routes)
     
     # 2. Trouver tous les trip_id associés à cette ligne
     line_trips = trips.loc[trips["route_id"] == route_id, ["trip_id","trip_headsign"]] # 
@@ -578,7 +582,7 @@ def scrape_data(data,graphs):
             #     logger.error("Skipping line %s due to persistent Cloudflare challenge.", line_name)
             #     continue
 
-            result = parse_construction_page(page_source,graphs[str(line_name)])
+            result = parse_construction_page(page_source,graphs[str(line_name)]["graph"])
 
             if result:
                 details, all_works = result
@@ -631,7 +635,9 @@ def main(generate_graphs=False,crawl_construction_data=True) -> None:
         paths = {}
         for line in data.keys():
             try:
-                graphs[line],paths[line] = display_line_structure(str(line),routes, trips, stop_times, stops)
+                graph,path = display_line_structure(str(line),routes, trips, stop_times, stops)
+                graphs[line] = {"graph": graph, "route_id": get_route_id(str(line),routes)}
+                paths[line] = path
             except ValueError:
                 logger.error(f"La ligne {line} n'a pas été trouvée.")
                 
