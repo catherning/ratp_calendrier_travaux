@@ -3,6 +3,8 @@ import os
 import json
 import csv
 from pathlib import Path
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 from bs4 import BeautifulSoup
 from icalendar import Calendar, Event
 import datetime as dt
@@ -17,12 +19,125 @@ from utils import is_running_in_docker
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
-
-from seleniumbase import SB
+logging.basicConfig(level=logging.DEBUG if os.getenv("DEBUG") == "true" else logging.INFO)
 
 DATE_FORMAT = "%Y%m%dT%H%M%S"
 DATA_FOLDER = "../data/"
+NAVITIA_BASE_URL = "https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia/line_reports/lines"
+IMPACTING_EFFECTS = {"NO_SERVICE", "SIGNIFICANT_DELAYS", "REDUCED_SERVICE", "DETOUR"}
+IGNORED_TAGS = {"ascenseur"}
+
+
+def dump_json_utf8(file_path: str, payload, default=None) -> None:
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, default=default, indent=4)
+
+
+def to_navitia_line_id(route_id: str) -> str:
+    if route_id.startswith("line:"):
+        return route_id
+    if route_id.startswith("IDFM:"):
+        return f"line:{route_id}"
+    return f"line:IDFM:{route_id}"
+
+
+def navitia_datetime_to_internal(navitia_dt: str) -> str:
+    # Navitia format is typically YYYYMMDDTHHMMSS and may include extra precision.
+    compact = navitia_dt.replace("-", "").replace(":", "")
+    return compact[:15]
+
+
+def clean_station_name(station_name: str) -> str:
+    return station_name.split("(")[0].strip()
+
+
+def extract_disruption_text(disruption: dict) -> str:
+    messages = disruption.get("messages", [])
+    if not messages:
+        return ""
+
+    preferred_channels = ["title", "notification", "moteur"]
+    for channel_name in preferred_channels:
+        for msg in messages:
+            channel = msg.get("channel", {})
+            if channel.get("name") == channel_name:
+                return BeautifulSoup(msg.get("text", ""), "html.parser").get_text(" ", strip=True)
+
+    return BeautifulSoup(messages[0].get("text", ""), "html.parser").get_text(" ", strip=True)
+
+
+def is_relevant_disruption(disruption: dict) -> bool:
+    tags = [tag.lower() for tag in disruption.get("tags", [])]
+    if any(tag in IGNORED_TAGS for tag in tags):
+        return False
+
+    severity_effect = disruption.get("severity", {}).get("effect", "")
+    if severity_effect not in IMPACTING_EFFECTS:
+        return False
+    
+    cause = disruption.get("cause", [])
+    match cause:
+        case "travaux":
+            return True
+        case "perturbation":
+            return False
+
+    return True
+
+
+def fetch_line_reports(route_id: str, api_key: str) -> dict:
+    navitia_line_id = to_navitia_line_id(route_id)
+    url = f"{NAVITIA_BASE_URL}/{quote(navitia_line_id, safe='')}/line_reports"
+    request = Request(
+        url,
+        headers={
+            "accept": "application/json",
+            "apikey": api_key,
+        },
+    )
+    with urlopen(request) as response:
+        return json.load(response)
+
+
+def disruption_to_construction_details(
+    disruption: dict,
+    line_name: str,
+    line_paths: list,
+    period: dict,
+) -> dict | None:
+    if not period:
+        return None
+
+    start_dt = navitia_datetime_to_internal(period.get("begin", ""))
+    end_dt = navitia_datetime_to_internal(period.get("end", ""))
+    if len(start_dt) != len("YYYYMMDDTHHMMSS") or len(end_dt) != len("YYYYMMDDTHHMMSS"):
+        return None
+
+    text = extract_disruption_text(disruption)
+    if not text:
+        text = "Travaux impactant le trafic"
+
+    stations = "toute la ligne"
+    for impacted_obj in disruption.get("impacted_objects", []):
+        section = impacted_obj.get("impacted_section")
+        if not section:
+            continue
+        start_name = clean_station_name(section.get("from", {}).get("name", ""))
+        end_name = clean_station_name(section.get("to", {}).get("name", ""))
+        if start_name and end_name and start_name != end_name:
+            stations = f"{start_name} | {end_name}"
+            break
+
+    title = text[:110].replace("/", "-").replace("|", "-")
+    details = {
+        "date_debut": start_dt,
+        "date_fin": end_dt,
+        "date_text": text,
+        "summary": f"Ligne {line_name} - {title}",
+        "stations": stations,
+    }
+    details["stations_concernes"] = get_stations_between(line_paths, details["stations"])
+    return details
 
 
 def is_cloudflare_challenge_page(page_source: str, page_title: str = "") -> bool:
@@ -516,8 +631,74 @@ def get_stations_between(path,stations):
             stations_concernes = [stations]
     return stations_concernes
 
+
+def fetch_data_from_api(data, graphs, paths):
+    api_key = os.getenv("RATP_API_KEY")
+    if not api_key:
+        logger.error("RATP_API_KEY is not configured. Cannot fetch line reports API.")
+        return data
+
+    for line_name in data.keys():
+        line_graph = graphs.get(str(line_name), {})
+        route_id = line_graph.get("route_id")
+        if not route_id:
+            logger.warning("No route_id found for line %s. Skipping API call.", line_name)
+            continue
+
+        logger.info("Fetching disruptions for line %s (%s)", line_name, route_id)
+        try:
+            payload = fetch_line_reports(route_id, api_key)
+        except Exception as e:
+            logger.error("Failed API call for line %s: %s", line_name, e)
+            continue
+
+        disruptions = payload.get("disruptions", [])
+        if not disruptions:
+            logger.info("No disruptions returned for line %s.", line_name)
+            continue
+
+        details = []
+        for j, disruption in enumerate(disruptions):
+            if not is_relevant_disruption(disruption):
+                continue
+
+            logger.debug("Disruption: %s", disruption["messages"][0]["text"])
+            periods = disruption.get("application_periods", [])
+            if not periods:
+                continue
+
+            for p_idx, period in enumerate(periods):
+                construction_details = disruption_to_construction_details(
+                    disruption,
+                    str(line_name),
+                    paths.get(str(line_name), []),
+                    period,
+                )
+                if not construction_details:
+                    continue
+
+                try:
+                    create_ics_file(
+                        construction_details,
+                        DATA_FOLDER + "event_ics",
+                        f"event_ligne_{construction_details['summary']}_{j+1}_{p_idx+1}",
+                    )
+                    construction_details["google_calendar"] = create_google_event(construction_details)
+                except Exception as e:
+                    logger.error("Could not create event output for line %s: %s", line_name, e)
+                    continue
+
+                details.append(construction_details)
+
+        if details:
+            data[line_name]["construction_list"] = details
+
+    return data
+
     
 def scrape_data(data,graphs):
+    from seleniumbase import SB
+
     # Use SeleniumBase in headless mode directly; do not rely on an external X display.
     with SB(uc=True, headless=True) as sb:
         
@@ -614,14 +795,7 @@ def scrape_data(data,graphs):
     
 
 def main(generate_graphs=False,crawl_construction_data=True) -> None:
-    # TODO: tester les pages au format https://www.bonjour-ratp.fr/actualites/articles/bulletin-travaux-25-avril/
-    # et https://www.ratp.fr/les-travaux-en-cours-et-a-venir
-    data = {}
-    # data = {i:{"link":f"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/metro-ligne-{i}-travaux"} for i in range(1, 15)}
-    # data["A"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-a-travaux"}
-    data["B"] = {"link":"https://www.ratp.fr/decouvrir/coulisses/modernisation-du-reseau/rer-b-travaux"}
-    data["C"] = {"link":"https://www.bonjour-ratp.fr/actualites/articles/ligne-rerc-dates-et-horaires-des-fermetures/"}
-    data["D"] = {"link":"https://www.bonjour-ratp.fr/actualites/articles/ligne-rerd-dates-et-horaires-des-fermetures/"}
+    data = {str(i): {} for i in range(1, 15)}
 
     
     if generate_graphs or not os.path.exists(DATA_FOLDER + "graph.json") or not os.path.exists(DATA_FOLDER + "graph_paths.json"):
@@ -647,11 +821,9 @@ def main(generate_graphs=False,crawl_construction_data=True) -> None:
             raise TypeError
 
                 
-        with open(DATA_FOLDER + "graph.json", "w") as f:
-            json.dump(graphs,f,default=set_default)
+        dump_json_utf8(DATA_FOLDER + "graph.json", graphs, default=set_default)
             
-        with open(DATA_FOLDER + "graph_paths.json", "w") as f:
-            json.dump(paths,f,default=set_default)
+        dump_json_utf8(DATA_FOLDER + "graph_paths.json", paths, default=set_default)
     else:
         with open(DATA_FOLDER + "graph.json", "r") as f:
             graphs = json.load(f)
@@ -660,16 +832,15 @@ def main(generate_graphs=False,crawl_construction_data=True) -> None:
             paths = json.load(f)
             
     
-    logger.info(f"Found {len(data)} construction detail links.")
+    logger.info(f"Preparing data collection for {len(data)} metro lines.")
     data_output_path = None
     if crawl_construction_data:
-        data = scrape_data(data,graphs)
+        data = fetch_data_from_api(data, graphs, paths)
         data = {k:v for k,v in data.items() if "construction_list" in v.keys()}
     
         # now = datetime.now().strftime("%Y%m%d")
         data_output_path = DATA_FOLDER + f"data.json"
-        with open(data_output_path, "w") as f:
-            json.dump(data,f)
+        dump_json_utf8(data_output_path, data)
     else:
         with open(DATA_FOLDER + "data.json", "r") as f:
             data = json.load(f)
@@ -679,8 +850,7 @@ def main(generate_graphs=False,crawl_construction_data=True) -> None:
                 
         # now = datetime.now().strftime("%Y%m%d")
         data_output_path = DATA_FOLDER + f"data.json"
-        with open(data_output_path, "w", encoding="utf-8") as f:
-            json.dump(data,f, ensure_ascii=False)
+        dump_json_utf8(data_output_path, data)
 
     if is_running_in_docker() and data_output_path:
         upload_outputs_to_gcs(

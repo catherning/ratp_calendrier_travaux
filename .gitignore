@@ -2,7 +2,8 @@
 .json
 .env
 *.deb
-data/
+IDFM-gtfs/
+event_ics/
 .venv/
 downloaded_files/
 gcloud_creds.json
