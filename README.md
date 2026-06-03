@@ -13,10 +13,7 @@ Il est né d'un besoin personnel : il existe déjà plusieurs sites d'informatio
 
 - **pyproject.lock**: Lists the dependencies required for the project, including Streamlit, BeautifulSoup, and any other libraries used in `backend_app.py` and `streamlit_app.py`.
 
-- **backend_app.py**: Contains the main logic for scraping construction details, creating ICS files, and generating Google Calendar URLs. It includes functions for parsing HTML, creating ICS files, and handling the main execution flow.
-  
-- **streamlit_app.py**: The entry point for the Streamlit application. It loads the data from `data/data.json`, displays the construction details, provides download links for the ICS files, and includes buttons for Google Calendar URLs.
-  
+
 - **data/data.json**: Stores the construction details in JSON format, including event summaries, start and end dates, and Google Calendar URLs.
   
 
@@ -33,24 +30,6 @@ Download files from https://prim.iledefrance-mobilites.fr/fr/jeux-de-donnees/off
    ```
    uv sync
    ```
-Install xephyr :
-`sudo apt-get update && sudo apt-get -y install xserver-xephyr`
-
-Install chrome 
-```
-wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-sudo dpkg -i ./google-chrome*.deb
-sudo apt-get install -f
-```
-
-# TODO: don't use seleniumbase which is overkill ? => playwright ?
-In this case: 
-```
-uv run playwright install
-```
-
-3. Download the GTFS files
-TODO:
 
 4. Run the backend application to scrape data and generate ICS files:
    ```
@@ -67,43 +46,7 @@ TODO:
 - After running the backend application, the `data/data.json` file will be populated with construction details.
 - Open the Streamlit app in your web browser to view the construction details, download ICS files, and access Google Calendar links.
 
-## Run The Scraper With Cloud Run Jobs
 
-The GitHub Actions workflow now deploys the scraper as a Cloud Run Job and configures a Cloud Scheduler HTTP trigger for recurring executions. GitHub Actions no longer runs the scraper container itself on a hosted runner.
-
-The stable GCP resource settings are versioned in [deploy/gcp/backend-scrape.config.json](/home/kaprime/Perso/ratp_calendrier_travaux/deploy/gcp/backend-scrape.config.json). Replace the `REPLACE_ME_*` placeholders in that file with your real project values. The workflow calls [scripts/deploy_backend_scrape_job.sh](/home/kaprime/Perso/ratp_calendrier_travaux/scripts/deploy_backend_scrape_job.sh), which reads that config and applies the Cloud Run Job and Cloud Scheduler changes with `gcloud`.
-
-Required GitHub repository variables:
-
-- `DOCKER_IMAGE`: Full container image reference used by Cloud Run Job.
-
-Resource names, service accounts, region, schedule, bucket, and Secret Manager secret name now live in the versioned deploy config instead of GitHub repository variables.
-
-Required GCP IAM and services:
-
-- Enable `run.googleapis.com`, `cloudscheduler.googleapis.com`, `secretmanager.googleapis.com`, and `storage.googleapis.com`.
-- Grant the GitHub deployment service account permissions to manage Cloud Run Jobs and Cloud Scheduler.
-- Grant the Cloud Run runtime service account read access to the Secret Manager secret and write access to the GCS bucket.
-- Grant the Cloud Scheduler service account permission to run the Cloud Run Job.
-
-The scheduler triggers the Cloud Run Jobs API endpoint:
-
-```text
-POST https://run.googleapis.com/v2/projects/$GCP_PROJECT_ID/locations/$GCP_REGION/jobs/$CLOUD_RUN_JOB_NAME:run
-```
-
-This keeps the recurring execution inside GCP while still letting GitHub Actions manage deployment updates.
-
-### Why Use A Script Instead Of Embedding All `gcloud` Commands In The Workflow
-
-For this stage, a versioned config file plus a small deployment script is the better split.
-
-- The workflow stays focused on CI concerns: checkout, auth, and invoking deployment.
-- The deploy logic is reusable from GitHub Actions, local terminals, or later from another automation system.
-- The resource definitions are centralized in one file instead of being spread across many GitHub variables.
-- When you move to Terraform, the script and JSON config are easier to replace than a large workflow full of imperative `gcloud` commands.
-
-The tradeoff is that `gcloud` in a script is still imperative state management. Terraform is still the better end state once you want drift detection, previews, and broader infra ownership.
 
 ## Contributing
 
@@ -112,6 +55,7 @@ Feel free to submit issues or pull requests for improvements or bug fixes. The c
 ### TODO
 - Use https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia/line_reports/lines/line%3AIDFM%3AC01374/line_reports? instead of scraping!
    - https://prim.iledefrance-mobilites.fr/fr/apis/idfm-navitia-line_reports-v2
+   - https://prim.iledefrance-mobilites.fr/playground/play.html?request=https%3A%2F%2Fprim.iledefrance-mobilites.fr%2Fmarketplace%2Fv2%2Fnavitia%2Fjourneys%3Ffrom%3Dstop_area%253AIDFM%253A71590%26to%3Dstop_area%253AIDFM%253A71311%26
   - https://prim.iledefrance-mobilites.fr/fr/aide-et-contact/documentation/prise-en-main-des-api/api-information-trafic-travaux/api-calculateur-ile-de-france-mobilites-messages-info-trafic-v2
 - Add filtering to find the relevant construction work depending on the station (then on a travel plan)
   - Pistes : https://prim.iledefrance-mobilites.fr/fr/jeux-de-donnees/lignes-gtfs
@@ -131,49 +75,60 @@ Feel free to submit issues or pull requests for improvements or bug fixes. The c
 - Store history of construction works?  
 - Use https://github.com/ToroData/Streamlit-App-KeepAlive for streamlit
 
-#### Security (do first)
-  -  Rotate the Mistral API key — a real key is in .env which could be accidentally exposed
-  -  Remove --server.enableXsrfProtection false from .devcontainer/devcontainer.json — disables CSRF protection even for shared Codespaces
-#### Backend (src/backend_app.py)
-- Bugs (crashers)
-  -  Fix get_llm_json_response fallback: response is never assigned when the API call fails, causing NameError on line ~35; the fallback also produces a completely different object structure
-  -  Fix bare except: blocks in scrape_data/scrape_data2 (~lines 456, 474) that reference unbound e — any ICS creation error raises a second NameError, masking the original
-  -  Guard rrule["byday"] access (~line 168) — crashes with KeyError when LLM returns an rrule without byday (e.g., simple daily recurrences)
-  -  Fix or delete scrape_data2 — calls sync_playwright but the import is commented out, making it a silent dead function
-- Correctness
-  -  Move print(f'Construction work information extracted: {details[i]}') inside the loop (~line 153) — currently only prints the last element
-  -  Replace e.add("vtimezone", "Europe/Paris") with proper timezone-aware datetime objects — VTIMEZONE is a calendar component, not an event property
-  -  Fix LLM prompt examples — both JSON examples are missing a comma between "stations" and "rrule", which may teach the LLM to produce invalid JSON
-- Code quality
-  -  Replace relative DATA_FOLDER = "../data/" with a path relative to __file__ — current code breaks if not run from src/
-  -  Add tests for GTFS path-finding functions (get_stations_graph_by_line, get_ordered_station_paths) — complex logic, zero test coverage
--  Resolve # TODOs and pass functions
 
-#### Frontend (src/streamlit_app.py)
-- Bugs (crashers)
-  -  Fix travail['download_link'] KeyError in the station-filter UI (~line 241) — field does not exist in the current data format
-  -  Guard no_work_lines.remove(line) (~line 261) — raises ValueError if data contains a line not present in LINE_INFO
-- Correctness
-  -  Convert date_debut/date_fin from %Y%m%dT%H%M%S to ISO 8601 before passing to streamlit-calendar — FullCalendar.js may misparse the current format
-  -  Use date_text field for human-readable date display in the station-filter expander instead of raw 20260301T220000 strings
-- Code quality / UX 
-  -  Deduplicate the "show all" and station-filter UIs — both render simultaneously, creating visual redundancy
-  -  Add line "15" (Grand Paris Express) to LINE_INFO if it should be supported, or cap the backend scrape range to match
-- Infrastructure / Config
-  -  Fix .devcontainer/devcontainer.json Python version: image uses python:1-3.11-bullseye but pyproject.toml requires >=3.12
-  -  Fix devcontainer postAttachCommand and openFiles paths — both reference streamlit_app.py at the project root, not src/streamlit_app.py
-  -  Switch devcontainer updateContentCommand from pip3 install to uv sync to respect the lockfile
-  -  Clean up pyproject.toml: remove python-certifi-win32 (Windows-only), pyautogui (unused), mistral-inference (pulls local model weights but only API is used); add pandas as an explicit dependency; move ipykernel/pytest/pytest-playwright to [project.optional-dependencies.dev]
-  -  Clean up data/ folder: remove or archive old data_YYYYMMDD.json files; establish a clear naming convention; remove committed .ics files that should be gitignored
-  -  Fix README.md: update file paths (src/backend_app.py, src/streamlit_app.py), fix lockfile name (uv.lock not pyproject.lock), and update run commands accordingly
+# Full revamp
+Revised Target Architecture
+┌─────────────────────────────────────────┐
+│  Frontend  (e.g. Next.js / plain React)  │
+│  - Journey input with stop autocomplete  │
+│  - Line multiselect                      │
+│  - Calendar view (FullCalendar directly) │
+│  - ICS download / Google Calendar links  │
+└──────────────┬──────────────────────────┘
+               │  REST / JSON
+               ▼
+┌─────────────────────────────────────────┐
+│  Backend API  (FastAPI)                  │
+│                                          │
+│  GET  /places?q=...                      │
+│         → proxy Navitia /places          │
+│                                          │
+│  GET  /disruptions?lines=1,A,H,...       │
+│         → Navitia /line_reports (cached) │
+│         → filter + normalize             │
+│                                          │
+│  GET  /journey-disruptions               │
+│          ?from=stop_area:IDFM:71590      │
+│          &to=stop_area:IDFM:71311        │
+│         → Navitia /journeys              │
+│         → collect lines + stops          │
+│         → /line_reports per line         │
+│         → filter_for_journey()           │
+│                                          │
+│  GET  /disruptions/{id}/ics              │
+│         → generate ICS bytes on-demand   │
+│                                          │
+│  GET  /disruptions/{id}/google-calendar  │
+│         → return Google Calendar URL     │
+└──────────────┬──────────────────────────┘
+               │  HTTPS + apikey header
+               ▼
+     Navitia API  (prim.iledefrance-mobilites.fr)
+       /places, /journeys, /line_reports
 
+## Migration Path (phased)
+- 1	Extract API client + domain logic from backend_app.py into src/services/ and src/domain/. Wire up FastAPI with /disruptions and /places.
+- 2	Add /journey-disruptions endpoint + filter_for_journey().
+- 3	Add /ics endpoint (single + bulk).
+- 4	Replace Streamlit frontend with React/Next.js calling the new API.
+- 5	Drop scraping code, GTFS files, LLM dependencies, Cloud Run Job, GCS storage.
 
-  ### To Terraform
-  - Storage `gcloud storage buckets create gs://ratp-travaux-gcs \
-    --default-storage-class=STANDARD \
-    --location=US-EAST1 \
-    --uniform-bucket-level-access \
-    --public-access-prevention`
+## Summary
+- Drop: scraping, LLM parsing, GTFS files, Cloud Run Job, GCS storage, Streamlit
+Keep and restructure: disruption_to_construction_details(), is_relevant_disruption(), fetch_line_reports(), ICS + Google Calendar generation
+- Add: FastAPI app with /places, /disruptions, /journey-disruptions, /ics endpoints; in-process functools.lru_cache or cachetools.TTLCache for Navitia calls
+- New frontend: Next.js calling your own FastAPI (API key never leaves the server)
+- Expand lines scope: all Métro + RER + Transilien lines (Navitia API supports them all, just add the line IDs to your LINE_INFO equivalent)
 
 # Public data doc
 - https://data.iledefrance-mobilites.fr/api/datasets/1.0/offre-horaires-tc-gtfs-idfm/attachments/opendata_gtfs_pdf/
