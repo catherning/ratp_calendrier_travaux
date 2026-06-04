@@ -64,6 +64,7 @@ v2   - https://prim.iledefrance-mobilites.fr/fr/apis/idfm-navitia-line_reports-v
 - Expose API endpoint on construction work? only if there's other use cases
 - Store history of construction works?  
 - Use https://github.com/ToroData/Streamlit-App-KeepAlive for streamlit
+- Where to use NEXT_PUBLIC_API_URL for deployment?
 
 
 # Full revamp
