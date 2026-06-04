@@ -54,22 +54,12 @@ Feel free to submit issues or pull requests for improvements or bug fixes. The c
 
 ### TODO
 - Use https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia/line_reports/lines/line%3AIDFM%3AC01374/line_reports? instead of scraping!
-   - https://prim.iledefrance-mobilites.fr/fr/apis/idfm-navitia-line_reports-v2
+v2   - https://prim.iledefrance-mobilites.fr/fr/apis/idfm-navitia-line_reports-v2
    - https://prim.iledefrance-mobilites.fr/playground/play.html?request=https%3A%2F%2Fprim.iledefrance-mobilites.fr%2Fmarketplace%2Fv2%2Fnavitia%2Fjourneys%3Ffrom%3Dstop_area%253AIDFM%253A71590%26to%3Dstop_area%253AIDFM%253A71311%26
-  - https://prim.iledefrance-mobilites.fr/fr/aide-et-contact/documentation/prise-en-main-des-api/api-information-trafic-travaux/api-calculateur-ile-de-france-mobilites-messages-info-trafic-v2
-- Add filtering to find the relevant construction work depending on the station (then on a travel plan)
-  - Pistes : https://prim.iledefrance-mobilites.fr/fr/jeux-de-donnees/lignes-gtfs
-  - https://prim.iledefrance-mobilites.fr/fr/jeux-de-donnees/offre-horaires-tc-gtfs-idfm?tab=vue_personnalisee
-  - https://github.com/psrc/transit_service_analyst/wiki/transit_service_analyst-documentation
-  - https://github.com/remix/partridge
-  - https://github.com/mrcagney/gtfs_kit
-  - Ou scraping de https://www.ma-ligne.co/ en dernier recours ou demander à ChatGPT d'avoir la liste des lignes
+  - https://prim.iledefrance-mobilites.fr/fr/aide-et-contact/documentation/prise-en-main-des-api/api-information-trafic-travaux/api-calculateur-ile-de-france-mobilites-messages-info-trafic-
 - Add RER / Transilien lines
-- Add backend cron to update the folder with data every week
 - Revamp front: change from streamlit? 
 - CICD ?
-- Use https://www.browserless.io/blog/modern-python-scraping-browserless-ai to bypass Cloudflare when deploying backend to cloud
-- Add Second LLM to check first LLM response is ok ?
 - Check accessibility
 - Expose API endpoint on construction work? only if there's other use cases
 - Store history of construction works?  
