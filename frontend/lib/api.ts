@@ -1,4 +1,4 @@
-import { DisruptionDetail, LineInfo, PlaceResult } from "./types";
+import { DisruptionDetail, LineInfo, PlaceResult, JourneyDisruptionResponse } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -27,8 +27,8 @@ export const api = {
     return apiFetch<DisruptionDetail[]>("/disruptions", { lines: lineCodes.join(",") });
   },
 
-  getJourneyDisruptions(fromId: string, toId: string): Promise<DisruptionDetail[]> {
-    return apiFetch<DisruptionDetail[]>("/journey-disruptions", { from: fromId, to: toId });
+  getJourneyDisruptions(fromId: string, toId: string): Promise<JourneyDisruptionResponse> {
+    return apiFetch<JourneyDisruptionResponse>("/journey-disruptions", { from: fromId, to: toId });
   },
 
   getIcsUrl(impactId: string, lineCode: string, periodIndex: number): string {

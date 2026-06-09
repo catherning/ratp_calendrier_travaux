@@ -65,7 +65,7 @@ export default function DisruptionCard({ disruption }: Props) {
 
           <div className="disruption-card__meta">
             <span className="disruption-card__effect">
-              {effectLabel(disruption.effect)}
+              {causeLabel(disruption.cause)} • {effectLabel(disruption.effect)}
             </span>
             {!isUpcoming && <span className="disruption-card__past-badge">Terminé</span>}
           </div>
@@ -144,4 +144,17 @@ function effectLabel(effect: string): string {
     MODIFIED_SERVICE: "Service modifié",
   };
   return map[effect] ?? effect;
+}
+
+function causeLabel(cause: string): string {
+  const map: Record<string, string> = {
+    travaux: "Travaux",
+    incident: "Incident",
+    perturbation: "Perturbation",
+    maintenance: "Maintenance",
+    delays: "Délais",
+    hors_travaux: "Hors travaux",
+  };
+  const key = cause ? cause.toLowerCase() : "";
+  return map[key] ?? (cause ? cause.charAt(0).toUpperCase() + cause.slice(1) : "Travaux");
 }

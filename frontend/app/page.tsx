@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { DisruptionDetail, PlaceResult } from "@/lib/types";
+import { DisruptionDetail, PlaceResult, JourneyItinerary } from "@/lib/types";
 import { api } from "@/lib/api";
 import LineSelector from "@/components/LineSelector";
 import DisruptionCard from "@/components/DisruptionCard";
@@ -19,6 +19,11 @@ export default function Home() {
   const [toPlace, setToPlace] = useState<PlaceResult | null>(null);
   const [isJourneyMode, setIsJourneyMode] = useState(false);
   const [journeyDisruptions, setJourneyDisruptions] = useState<DisruptionDetail[]>([]);
+  const [activeItinerary, setActiveItinerary] = useState<JourneyItinerary | null>(null);
+
+  // Filters state
+  const [hidePastEvents, setHidePastEvents] = useState<boolean>(true);
+  const [effectFilter, setEffectFilter] = useState<string>("ALL");
 
   // Modal event detail state
   const [activeDisruption, setActiveDisruption] = useState<DisruptionDetail | null>(null);
@@ -61,7 +66,8 @@ export default function Home() {
     setIsJourneyMode(true);
     try {
       const data = await api.getJourneyDisruptions(fromPlace.id, toPlace.id);
-      setJourneyDisruptions(data);
+      setJourneyDisruptions(data.disruptions);
+      setActiveItinerary(data.itinerary);
     } catch (err) {
       setError("Échec du calcul d'itinéraire ou de chargement des perturbations.");
       console.error(err);
@@ -75,15 +81,30 @@ export default function Home() {
     setFromPlace(null);
     setToPlace(null);
     setJourneyDisruptions([]);
+    setActiveItinerary(null);
   };
 
   const currentDisruptions = isJourneyMode ? journeyDisruptions : disruptions;
 
+  // Apply filters to currentDisruptions
+  const filteredDisruptions = currentDisruptions.filter((d) => {
+    if (hidePastEvents) {
+      const now = new Date();
+      if (new Date(d.date_fin) < now) {
+        return false;
+      }
+    }
+    if (effectFilter !== "ALL" && d.effect !== effectFilter) {
+      return false;
+    }
+    return true;
+  });
+
   // Bulk Export ICS URL
-  const bulkIcsUrl = currentDisruptions.length > 0
+  const bulkIcsUrl = filteredDisruptions.length > 0
     ? api.getBulkIcsUrl(
-        currentDisruptions.map((d) => d.id),
-        currentDisruptions.map((d) => d.line_code)
+        filteredDisruptions.map((d) => d.id),
+        filteredDisruptions.map((d) => d.line_code)
       )
     : "#";
 
@@ -108,7 +129,7 @@ export default function Home() {
         {/* Sidebar Controls */}
         <aside className="app-sidebar">
           {/* Journey Planner Panel */}
-          <div className="card panel">
+          <div className="card panel" style={{ overflow: "visible" }}>
             <h2 className="panel__title">📍 Recherche d'itinéraire</h2>
             <p className="panel__desc">Trouvez les perturbations spécifiques à votre trajet quotidien.</p>
 
@@ -171,7 +192,7 @@ export default function Home() {
                 className={`view-selector__btn ${viewMode === "list" ? "view-selector__btn--active" : ""}`}
                 onClick={() => setViewMode("list")}
               >
-                📊 Liste ({currentDisruptions.length})
+                📊 Liste ({filteredDisruptions.length})
               </button>
               <button
                 id="view-calendar-tab"
@@ -182,7 +203,7 @@ export default function Home() {
               </button>
             </div>
 
-            {currentDisruptions.length > 0 && (
+            {filteredDisruptions.length > 0 && (
               <a
                 href={bulkIcsUrl}
                 download="travaux_idf_mobilites.ics"
@@ -193,6 +214,41 @@ export default function Home() {
                 📥 Exporter tout en ICS
               </a>
             )}
+          </div>
+
+          {/* Filter Bar */}
+          <div className="filter-bar">
+            <div className="filter-item">
+              <input
+                id="hide-past-events-checkbox"
+                type="checkbox"
+                className="filter-checkbox"
+                checked={hidePastEvents}
+                onChange={(e) => setHidePastEvents(e.target.checked)}
+              />
+              <label htmlFor="hide-past-events-checkbox" className="filter-label">
+                Masquer les travaux terminés
+              </label>
+            </div>
+
+            <div className="filter-item">
+              <label htmlFor="effect-filter-select" className="filter-label">
+                Filtrer par impact :
+              </label>
+              <select
+                id="effect-filter-select"
+                className="filter-select"
+                value={effectFilter}
+                onChange={(e) => setEffectFilter(e.target.value)}
+              >
+                <option value="ALL">Tous les impacts</option>
+                <option value="NO_SERVICE">Trafic interrompu</option>
+                <option value="SIGNIFICANT_DELAYS">Retards importants</option>
+                <option value="REDUCED_SERVICE">Service réduit</option>
+                <option value="DETOUR">Déviation</option>
+                <option value="MODIFIED_SERVICE">Service modifié</option>
+              </select>
+            </div>
           </div>
 
           {/* Main Content Render */}
@@ -210,7 +266,73 @@ export default function Home() {
               </div>
             )}
 
-            {!loading && !error && currentDisruptions.length === 0 && (
+            {/* Proposed Itinerary Routing display */}
+            {!loading && !error && activeItinerary && (
+              <div className="card itinerary-card">
+                <div className="itinerary-header">
+                  <div className="itinerary-title">
+                    <span>🗺️</span>
+                    <h3>Itinéraire proposé</h3>
+                  </div>
+                  <div className="itinerary-time">
+                    <span className="itinerary-duration">{Math.round(activeItinerary.duration / 60)} min</span>
+                    <span className="itinerary-period">
+                      {new Date(activeItinerary.departure_time).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                      {" - "}
+                      {new Date(activeItinerary.arrival_time).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="itinerary-timeline">
+                  {activeItinerary.sections.map((section, idx) => {
+                    const isTransit = section.type === "public_transport";
+                    const isWalking = section.mode === "walking" || section.type === "street_network";
+
+                    return (
+                      <div key={idx} className="itinerary-segment">
+                        {idx > 0 && <div className="itinerary-arrow">➔</div>}
+
+                        <div className="itinerary-segment-content">
+                          {isTransit ? (
+                            <div className="itinerary-transit">
+                              <span
+                                className="itinerary-badge"
+                                style={{
+                                  backgroundColor: `#${section.line_color || "333"}`,
+                                  color: `#${section.line_text_color || "fff"}`
+                                }}
+                              >
+                                {section.line_code}
+                              </span>
+                              <div className="itinerary-segment-details">
+                                <span className="itinerary-station-name">{section.from_name}</span>
+                                <span className="itinerary-segment-duration">({Math.round(section.duration / 60)} min)</span>
+                              </div>
+                            </div>
+                          ) : isWalking ? (
+                            <div className="itinerary-walking" title={`Marcher de ${section.from_name} à ${section.to_name}`}>
+                              <span className="itinerary-walking-icon">🚶</span>
+                              <div className="itinerary-segment-details">
+                                <span className="itinerary-station-name">{section.from_name === "Départ" ? "Marche" : section.from_name}</span>
+                                <span className="itinerary-segment-duration">({Math.round(section.duration / 60)} min)</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="itinerary-other">
+                              <span className="itinerary-other-icon">⏳</span>
+                              <span className="itinerary-segment-duration">{Math.round(section.duration / 60)} min</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {!loading && !error && filteredDisruptions.length === 0 && (
               <div className="state-message state-message--empty">
                 <h3>🌿 Aucun travail détecté</h3>
                 <p>
@@ -219,18 +341,18 @@ export default function Home() {
               </div>
             )}
 
-            {!loading && !error && currentDisruptions.length > 0 && (
+            {!loading && !error && filteredDisruptions.length > 0 && (
               <>
                 {viewMode === "list" ? (
                   <div className="disruption-list">
-                    {currentDisruptions.map((d) => (
+                    {filteredDisruptions.map((d) => (
                       <DisruptionCard key={d.id} disruption={d} />
                     ))}
                   </div>
                 ) : (
                   <div className="card calendar-card">
                     <DisruptionCalendar
-                      disruptions={currentDisruptions}
+                      disruptions={filteredDisruptions}
                       onEventClick={setActiveDisruption}
                     />
                   </div>
@@ -277,7 +399,7 @@ export default function Home() {
                   </div>
                 )}
                 <div className="modal__meta-full">
-                  <strong>⚠️ Effet:</strong> {effectLabel(activeDisruption.effect)}
+                  <strong>⚠️ Impact:</strong> {causeLabel(activeDisruption.cause)} • {effectLabel(activeDisruption.effect)}
                 </div>
               </div>
 
@@ -418,4 +540,17 @@ function effectLabel(effect: string): string {
     MODIFIED_SERVICE: "Service modifié",
   };
   return map[effect] ?? effect;
+}
+
+function causeLabel(cause: string): string {
+  const map: Record<string, string> = {
+    travaux: "Travaux",
+    incident: "Incident",
+    perturbation: "Perturbation",
+    maintenance: "Maintenance",
+    delays: "Délais",
+    hors_travaux: "Hors travaux",
+  };
+  const key = cause ? cause.toLowerCase() : "";
+  return map[key] ?? (cause ? cause.charAt(0).toUpperCase() + cause.slice(1) : "Travaux");
 }

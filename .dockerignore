@@ -1,6 +1,27 @@
-data/IDFM-gtfs/
-data/event_ics/
-.env
-downloaded_files/
+# Python ignore patterns
+.git/
+.venv/
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.env.local
+.env.*.local
+
+# Node ignore patterns (to prevent root copies from leaking)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# General files
+Dockerfile
+docker-compose*.yml
+README.md
+task.md
+walkthrough.md
+[inactive]_scripts/
+data/
+deploy/
+pyproject.toml.backup
 gcloud_creds.json

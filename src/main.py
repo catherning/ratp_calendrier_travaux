@@ -25,6 +25,10 @@ from src.domain.disruptions import (
     find_disruption_in_raw,
     normalize_line_disruptions,
     filter_for_journey,
+    JourneyDisruptionResponse,
+    JourneyItinerary,
+    ItinerarySection,
+    _navitia_dt_to_iso,
 )
 from src.domain.lines import (
     ALL_CODES,
@@ -144,13 +148,13 @@ async def get_disruptions(
     return flat
 
 
-@app.get("/journey-disruptions", summary="Get disruptions impacting a specific journey")
+@app.get("/journey-disruptions", summary="Get disruptions impacting a specific journey", response_model=JourneyDisruptionResponse)
 async def get_journey_disruptions(
     from_stop: str = Query(..., alias="from", description="From stop area ID"),
     to_stop: str = Query(..., alias="to", description="To stop area ID"),
-) -> list[DisruptionDetail]:
+) -> JourneyDisruptionResponse:
     """
-    Calculate journey, find used lines and stop points, and return relevant disruptions.
+    Calculate journey, find used lines and stop points, and return relevant disruptions and proposed itinerary.
     """
     try:
         journeys_data = await fetch_journeys(from_stop, to_stop, API_KEY)
@@ -160,33 +164,82 @@ async def get_journey_disruptions(
 
     journeys = journeys_data.get("journeys", [])
     if not journeys:
-        return []
+        return JourneyDisruptionResponse(itinerary=None, disruptions=[])
 
     # Extract lines and their stops from the first (best) journey
     best_journey = journeys[0]
     line_stops_map: dict[str, list[dict]] = {}
 
+    # Parse sections into ItinerarySections
+    sections_list = []
     for section in best_journey.get("sections", []):
-        if section.get("type") != "public_transport":
-            continue
+        sec_type = section.get("type", "")
+        mode = None
+        line_code = None
+        line_color = None
+        line_text_color = None
 
         display_info = section.get("display_informations", {})
-        line_code = display_info.get("code")
-        if not line_code or line_code not in LINE_REGISTRY:
-            continue
+        if display_info:
+            line_code = display_info.get("code")
+            line_color = display_info.get("color")
+            line_text_color = display_info.get("text_color")
+            physical_mode = display_info.get("physical_mode", "").lower()
+            commercial_mode = display_info.get("commercial_mode", "").lower()
+            if "métro" in physical_mode or "metro" in physical_mode or "métro" in commercial_mode or "metro" in commercial_mode:
+                mode = "metro"
+            elif "rer" in physical_mode or "rer" in commercial_mode:
+                mode = "rer"
+            elif "train" in physical_mode or "transilien" in physical_mode or "train" in commercial_mode or "transilien" in commercial_mode:
+                mode = "train"
+            elif "tram" in physical_mode or "tramway" in physical_mode or "tram" in commercial_mode or "tramway" in commercial_mode:
+                mode = "tram"
+            else:
+                mode = "bus"
+        else:
+            mode = section.get("mode")
 
-        stops = []
-        for sdt in section.get("stop_date_times", []):
-            sp = sdt.get("stop_point", {})
-            if sp:
-                stops.append({
-                    "id": sp.get("id"),
-                    "name": sp.get("name", "").split("(")[0].strip()
-                })
+        from_name = section.get("from", {}).get("name", "").split("(")[0].strip()
+        to_name = section.get("to", {}).get("name", "").split("(")[0].strip()
 
-        if line_code not in line_stops_map:
-            line_stops_map[line_code] = []
-        line_stops_map[line_code].extend(stops)
+        if not from_name:
+            from_name = "Départ"
+        if not to_name:
+            to_name = "Arrivée"
+
+        sections_list.append(
+            ItinerarySection(
+                type=sec_type,
+                mode=mode,
+                line_code=line_code,
+                line_color=line_color,
+                line_text_color=line_text_color,
+                from_name=from_name,
+                to_name=to_name,
+                duration=section.get("duration", 0),
+            )
+        )
+
+        # Build line stops map for disruptions
+        if sec_type == "public_transport" and line_code and line_code in LINE_REGISTRY:
+            stops = []
+            for sdt in section.get("stop_date_times", []):
+                sp = sdt.get("stop_point", {})
+                if sp:
+                    stops.append({
+                        "id": sp.get("id"),
+                        "name": sp.get("name", "").split("(")[0].strip()
+                    })
+            if line_code not in line_stops_map:
+                line_stops_map[line_code] = []
+            line_stops_map[line_code].extend(stops)
+
+    journey_itinerary = JourneyItinerary(
+        duration=best_journey.get("duration", 0),
+        departure_time=_navitia_dt_to_iso(best_journey.get("departure_date_time", "")),
+        arrival_time=_navitia_dt_to_iso(best_journey.get("arrival_date_time", "")),
+        sections=sections_list,
+    )
 
     # For each line, fetch its disruptions, filter them, and accumulate
     all_relevant_disruptions: list[DisruptionDetail] = []
@@ -209,7 +262,11 @@ async def get_journey_disruptions(
 
     # Sort chronologically
     all_relevant_disruptions.sort(key=lambda d: d.date_debut)
-    return all_relevant_disruptions
+
+    return JourneyDisruptionResponse(
+        itinerary=journey_itinerary,
+        disruptions=all_relevant_disruptions,
+    )
 
 
 @app.get("/disruptions/ics", summary="Download bulk ICS for multiple disruptions")

@@ -48,6 +48,33 @@ class DisruptionDetail(BaseModel):
     effect: str           # Navitia severity effect
 
 
+class ItinerarySection(BaseModel):
+    """A segment of the calculated journey route."""
+    type: str                  # "public_transport" | "street_network" | "waiting"
+    mode: str | None = None       # "walking" | "metro" | "rer" | "train" | ...
+    line_code: str | None = None  # e.g., "A", "4"
+    line_color: str | None = None # e.g., "E3051C"
+    line_text_color: str | None = None # e.g., "FFFFFF"
+    from_name: str             # departure station
+    to_name: str               # arrival station
+    duration: int              # duration in seconds
+
+
+class JourneyItinerary(BaseModel):
+    """The complete calculated route proposed by Navitia."""
+    duration: int              # total duration in seconds
+    departure_time: str        # ISO timestamp
+    arrival_time: str          # ISO timestamp
+    sections: list[ItinerarySection]
+
+
+class JourneyDisruptionResponse(BaseModel):
+    """Unified response containing the journey's itinerary and relevant disruptions."""
+    itinerary: JourneyItinerary | None = None
+    disruptions: list[DisruptionDetail]
+
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _navitia_dt_to_iso(navitia_dt: str) -> str:
@@ -83,16 +110,34 @@ def _extract_text(disruption: dict) -> str:
 
 
 def _extract_stations(disruption: dict) -> str:
-    """Return 'StationA | StationB' or 'toute la ligne'."""
+    """Return 'StationA | StationB' or a list of specific stations, or 'toute la ligne'."""
+    stations = []
+
+    # 1. First, check if there is an impacted section
     for obj in disruption.get("impacted_objects", []):
         section = obj.get("impacted_section")
-        if not section:
-            continue
-        from_name = section.get("from", {}).get("name", "").split("(")[0].strip()
-        to_name = section.get("to", {}).get("name", "").split("(")[0].strip()
-        if from_name and to_name and from_name != to_name:
-            return f"{from_name} | {to_name}"
+        if section:
+            from_name = section.get("from", {}).get("name", "").split("(")[0].strip()
+            to_name = section.get("to", {}).get("name", "").split("(")[0].strip()
+            if from_name and from_name not in stations:
+                stations.append(from_name)
+            if to_name and to_name not in stations:
+                stations.append(to_name)
+
+    # 2. Also collect individual impacted pt_objects (stop_areas or stop_points)
+    for obj in disruption.get("impacted_objects", []):
+        pt = obj.get("pt_object", {})
+        if pt:
+            name = pt.get("name", "").split("(")[0].strip()
+            if name and name not in stations:
+                # Filter out line names like "RER A"
+                if not any(prefix in name for prefix in ["RER", "Métro", "Train", "Ligne"]):
+                    stations.append(name)
+
+    if stations:
+        return " | ".join(stations)
     return "toute la ligne"
+
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────

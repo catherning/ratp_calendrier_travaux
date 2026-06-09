@@ -32,3 +32,26 @@ export interface PlaceResult {
   label: string;
   coord: { lat: string; lon: string };
 }
+
+export interface ItinerarySection {
+  type: string;                  // "public_transport" | "street_network" | "waiting"
+  mode?: string;                 // "walking" | "metro" | "rer" | "train" | ...
+  line_code?: string;
+  line_color?: string;
+  line_text_color?: string;
+  from_name: string;
+  to_name: string;
+  duration: number;
+}
+
+export interface JourneyItinerary {
+  duration: number;
+  departure_time: string;
+  arrival_time: string;
+  sections: ItinerarySection[];
+}
+
+export interface JourneyDisruptionResponse {
+  itinerary: JourneyItinerary | null;
+  disruptions: DisruptionDetail[];
+}

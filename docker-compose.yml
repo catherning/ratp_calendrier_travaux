@@ -1,22 +1,36 @@
-name: ratp-travaux
+name: ratp-calendrier-travaux
 
 services:
-  backend-scrape:
+  backend:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ratp-travaux-backend:test
-    container_name: ratp-backend-scrape
-
-    # Persist generated JSON/ICS on the host.
-    volumes:
-      - ./data:/data
-      - ./gcloud_creds.json:/secrets/gcloud_creds.json:ro
-
+    image: ratp-travaux-backend:latest
+    container_name: ratp-backend
+    ports:
+      - "8000:8000"
     env_file:
-      - ./.env
+      - .env
     environment:
-      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcloud_creds.json
+      - PORT=8000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
-    shm_size: "1gb"
-    restart: "no"
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
+    image: ratp-travaux-frontend:latest
+    container_name: ratp-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
