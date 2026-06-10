@@ -14,7 +14,7 @@ COPY app/ ./app/
 COPY components/ ./components/
 COPY lib/ ./lib/
 COPY public/ ./public/
-COPY tsconfig.json next.config.ts eslint.config.mjs next-env.d.ts ./
+COPY tsconfig.json next.config.ts eslint.config.mjs ./
 
 # Build-time environment variable so Next.js hardcodes the backend URL
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
@@ -30,11 +30,13 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Copy necessary production artifacts from the builder stage
-COPY --from=builder /app/package.json /app/package-lock.json ./
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/node_modules ./node_modules
+# Copy necessary production artifacts from the builder stage with correct ownership
+COPY --from=builder --chown=node:node /app/package.json /app/package-lock.json ./
+COPY --from=builder --chown=node:node /app/.next ./.next
+COPY --from=builder --chown=node:node /app/public ./public
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+
+USER node
 
 EXPOSE 3000
 
