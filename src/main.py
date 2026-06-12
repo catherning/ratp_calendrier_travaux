@@ -12,13 +12,15 @@ Run locally:
   uv run uvicorn src.main:app --reload --port 8000
 """
 import asyncio
+from contextlib import asynccontextmanager
 import logging
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+import httpx
 
 from src.domain.disruptions import (
     DisruptionDetail,
@@ -50,18 +52,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-API_KEY = os.getenv("NAVITIA_API_KEY", "")
+API_KEY = os.getenv("RATP_API_KEY") or ""
 if not API_KEY:
-    logger.warning("NAVITIA_API_KEY is not set – API calls will fail.")
+    logger.warning("RATP_API_KEY is not set – API calls will fail.")
+else:
+    logger.info("API Key successfully loaded from environment.")
 
 _allowed_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")]
 
 # ── App ────────────────────────────────────────────────────────────────────────
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Shared, thread-safe asynchronous client with reusable connection pool
+    async with httpx.AsyncClient() as client:
+        app.state.client = client
+        yield
+
 app = FastAPI(
     title="RATP Travaux API",
     description="Proxies Navitia line_reports and converts disruptions to ICS / Google Calendar.",
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -70,6 +82,10 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+
+
+def get_client(request: Request) -> httpx.AsyncClient:
+    return request.app.state.client
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -95,10 +111,11 @@ def get_lines() -> list[dict]:
 @app.get("/places", summary="Search for stop areas by name")
 async def get_places(
     q: str = Query(..., min_length=2, description="Search query, e.g. 'Nation'"),
+    client: httpx.AsyncClient = Depends(get_client),
 ) -> list[dict]:
     """Proxy Navitia /places, filtering to stop_areas only."""
     try:
-        raw_places = await fetch_places(q, API_KEY)
+        raw_places = await fetch_places(q, API_KEY, client=client)
     except Exception as exc:
         logger.error("Navitia /places error: %s", exc)
         raise HTTPException(status_code=502, detail="Error reaching Navitia API")
@@ -118,6 +135,7 @@ async def get_places(
 @app.get("/disruptions", summary="Fetch disruptions for selected lines")
 async def get_disruptions(
     lines: str = Query(..., description="Comma-separated line codes, e.g. '4,A,H'"),
+    client: httpx.AsyncClient = Depends(get_client),
 ) -> list[DisruptionDetail]:
     """
     Fetch Navitia line_reports for each requested line (in parallel),
@@ -134,7 +152,7 @@ async def get_disruptions(
     async def _fetch_one(code: str) -> list[DisruptionDetail]:
         line_info: LineInfo = LINE_REGISTRY[code]
         try:
-            raw = await fetch_line_reports(line_info.navitia_id, API_KEY)
+            raw = await fetch_line_reports(line_info.navitia_id, API_KEY, client=client)
             return normalize_line_disruptions(raw, line_info)
         except Exception as exc:
             logger.error("Failed to fetch disruptions for line %s: %s", code, exc)
@@ -152,12 +170,13 @@ async def get_disruptions(
 async def get_journey_disruptions(
     from_stop: str = Query(..., alias="from", description="From stop area ID"),
     to_stop: str = Query(..., alias="to", description="To stop area ID"),
+    client: httpx.AsyncClient = Depends(get_client),
 ) -> JourneyDisruptionResponse:
     """
     Calculate journey, find used lines and stop points, and return relevant disruptions and proposed itinerary.
     """
     try:
-        journeys_data = await fetch_journeys(from_stop, to_stop, API_KEY)
+        journeys_data = await fetch_journeys(from_stop, to_stop, API_KEY, client=client)
     except Exception as exc:
         logger.error("Navitia journeys error: %s", exc)
         raise HTTPException(status_code=502, detail="Error reaching Navitia journeys API")
@@ -248,7 +267,7 @@ async def get_journey_disruptions(
     async def _fetch_and_filter(line_code: str, stops: list[dict]):
         line_info = LINE_REGISTRY[line_code]
         try:
-            raw = await fetch_line_reports(line_info.navitia_id, API_KEY)
+            raw = await fetch_line_reports(line_info.navitia_id, API_KEY, client=client)
             disruptions = normalize_line_disruptions(raw, line_info)
             relevant = filter_for_journey(disruptions, stops)
             for d in relevant:
@@ -273,6 +292,7 @@ async def get_journey_disruptions(
 async def get_bulk_ics(
     ids: str = Query(..., description="Comma-separated disruption detail IDs, e.g. 'uuid__p0,uuid__p1'"),
     lines: str = Query(..., description="Comma-separated line codes corresponding to the IDs"),
+    client: httpx.AsyncClient = Depends(get_client),
 ) -> Response:
     """Generate and return a bulk ICS calendar file for selected disruptions."""
     id_list = [i.strip() for i in ids.split(",") if i.strip()]
@@ -298,7 +318,7 @@ async def get_bulk_ics(
     async def _fetch_line_items(line_code: str, items: list):
         line_info = LINE_REGISTRY[line_code]
         try:
-            raw = await fetch_line_reports(line_info.navitia_id, API_KEY)
+            raw = await fetch_line_reports(line_info.navitia_id, API_KEY, client=client)
             for impact_id, period_index, compound_id in items:
                 detail = find_disruption_in_raw(raw, impact_id, period_index, line_info)
                 if detail:
@@ -324,6 +344,7 @@ async def get_disruption_ics(
     impact_id: str,
     line: str = Query(..., description="Line code, e.g. '4'"),
     period: int = Query(0, ge=0, description="application_period index"),
+    client: httpx.AsyncClient = Depends(get_client),
 ) -> Response:
     """Generate and return an ICS calendar file for the given disruption."""
     line_info = get_line(line)
@@ -331,7 +352,7 @@ async def get_disruption_ics(
         raise HTTPException(status_code=404, detail=f"Unknown line: {line}")
 
     try:
-        raw = await fetch_line_reports(line_info.navitia_id, API_KEY)
+        raw = await fetch_line_reports(line_info.navitia_id, API_KEY, client=client)
     except Exception as exc:
         logger.error("Navitia error for ICS %s: %s", impact_id, exc)
         raise HTTPException(status_code=502, detail="Error reaching Navitia API")
@@ -361,6 +382,7 @@ async def get_google_calendar_url(
     impact_id: str,
     line: str = Query(..., description="Line code, e.g. '4'"),
     period: int = Query(0, ge=0, description="application_period index"),
+    client: httpx.AsyncClient = Depends(get_client),
 ) -> dict:
     """Return the Google Calendar 'add event' URL for the given disruption."""
     line_info = get_line(line)
@@ -368,7 +390,7 @@ async def get_google_calendar_url(
         raise HTTPException(status_code=404, detail=f"Unknown line: {line}")
 
     try:
-        raw = await fetch_line_reports(line_info.navitia_id, API_KEY)
+        raw = await fetch_line_reports(line_info.navitia_id, API_KEY, client=client)
     except Exception as exc:
         logger.error("Navitia error for GCal %s: %s", impact_id, exc)
         raise HTTPException(status_code=502, detail="Error reaching Navitia API")

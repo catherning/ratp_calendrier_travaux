@@ -81,18 +81,40 @@ def _navitia_dt_to_iso(navitia_dt: str) -> str:
     """
     Convert Navitia compact datetime to ISO 8601.
     '20260706T044500' → '2026-07-06T04:45:00'
-    Also handles '20260706T044500.000' variants.
+    Also handles '20260706T044500.000' and other ISO-like variants.
     """
     s = navitia_dt.strip()
-    if "T" not in s:
+    if not s:
         return s
-    date_part, time_part = s.split("T", 1)
-    date_part = date_part.replace("-", "")[:8]
-    time_part = time_part.split(".")[0].replace(":", "")[:6]
-    return (
-        f"{date_part[0:4]}-{date_part[4:6]}-{date_part[6:8]}"
-        f"T{time_part[0:2]}:{time_part[2:4]}:{time_part[4:6]}"
-    )
+
+    # If already standard ISO 8601 (with dashes/hyphens), return it
+    if "-" in s:
+        try:
+            datetime.fromisoformat(s)
+            return s
+        except ValueError:
+            pass
+
+    # Try parsing compact Navitia formats
+    try:
+        clean_s = s.split(".")[0].replace("-", "").replace(":", "")
+        dt = datetime.strptime(clean_s, "%Y%m%dT%H%M%S")
+        return dt.isoformat()
+    except Exception:
+        # Graceful fallback to manual string slicing
+        try:
+            if "T" in s:
+                date_part, time_part = s.split("T", 1)
+                date_part = date_part.replace("-", "")[:8]
+                time_part = time_part.split(".")[0].replace(":", "")[:6]
+                if len(date_part) == 8 and len(time_part) >= 6:
+                    return (
+                        f"{date_part[0:4]}-{date_part[4:6]}-{date_part[6:8]}"
+                        f"T{time_part[0:2]}:{time_part[2:4]}:{time_part[4:6]}"
+                    )
+        except Exception:
+            pass
+        return s
 
 
 def _extract_text(disruption: dict) -> str:

@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { DisruptionDetail, PlaceResult, JourneyItinerary } from "@/lib/types";
+import { DisruptionDetail, PlaceResult, JourneyItinerary, LineInfo } from "@/lib/types";
 import { api } from "@/lib/api";
+import { causeLabel, effectLabel } from "@/lib/utils";
 import LineSelector from "@/components/LineSelector";
 import DisruptionCard from "@/components/DisruptionCard";
 import DisruptionCalendar from "@/components/DisruptionCalendar";
 
 export default function Home() {
   const [selectedLines, setSelectedLines] = useState<string[]>(["1", "4", "A"]);
+  const [lines, setLines] = useState<LineInfo[]>([]);
   const [disruptions, setDisruptions] = useState<DisruptionDetail[]>([]);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   const [loading, setLoading] = useState(false);
@@ -27,6 +29,13 @@ export default function Home() {
 
   // Modal event detail state
   const [activeDisruption, setActiveDisruption] = useState<DisruptionDetail | null>(null);
+
+  // Fetch available lines metadata once on mount
+  useEffect(() => {
+    api.getLines()
+      .then(setLines)
+      .catch((err) => console.error("Failed to load transit lines:", err));
+  }, []);
 
   // Handle normal line disruption fetch
   useEffect(() => {
@@ -178,7 +187,7 @@ export default function Home() {
                 <span>Itinéraire actif — Lignes automatiques</span>
               </div>
             )}
-            <LineSelector selected={selectedLines} onChange={setSelectedLines} />
+            <LineSelector lines={lines} selected={selectedLines} onChange={setSelectedLines} />
           </div>
         </aside>
 
@@ -529,28 +538,4 @@ function PlaceAutocomplete({
       </div>
     </div>
   );
-}
-
-function effectLabel(effect: string): string {
-  const map: Record<string, string> = {
-    NO_SERVICE: "Trafic interrompu",
-    SIGNIFICANT_DELAYS: "Retards importants",
-    REDUCED_SERVICE: "Service réduit",
-    DETOUR: "Déviation",
-    MODIFIED_SERVICE: "Service modifié",
-  };
-  return map[effect] ?? effect;
-}
-
-function causeLabel(cause: string): string {
-  const map: Record<string, string> = {
-    travaux: "Travaux",
-    incident: "Incident",
-    perturbation: "Perturbation",
-    maintenance: "Maintenance",
-    delays: "Délais",
-    hors_travaux: "Hors travaux",
-  };
-  const key = cause ? cause.toLowerCase() : "";
-  return map[key] ?? (cause ? cause.charAt(0).toUpperCase() + cause.slice(1) : "Travaux");
 }

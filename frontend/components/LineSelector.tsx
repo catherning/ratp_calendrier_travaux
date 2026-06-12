@@ -1,42 +1,44 @@
 "use client";
 
 import Image from "next/image";
-import { LINE_COLORS, LINE_GROUPS, LINE_LOGOS, lineDisplayName } from "@/lib/lines";
+import { LineInfo } from "@/lib/types";
 
 interface Props {
+  lines: LineInfo[];
   selected: string[];
   onChange: (codes: string[]) => void;
 }
 
 function LineBadge({
-  code,
+  line,
   active,
   onClick,
 }: {
-  code: string;
+  line: LineInfo;
   active: boolean;
   onClick: () => void;
 }) {
-  const colors = LINE_COLORS[code] ?? { bg: "888888", text: "FFFFFF" };
-  const logo = LINE_LOGOS[code];
+  const bg = line.color;
+  const fg = line.text_color;
+  const logo = line.logo_url;
 
   return (
     <button
-      id={`line-badge-${code}`}
+      id={`line-badge-${line.code}`}
       onClick={onClick}
-      title={`Ligne ${code}`}
+      title={`Ligne ${line.code}`}
       aria-pressed={active}
       className={`line-badge${active ? " line-badge--active" : ""}`}
       style={
         active
-          ? { background: `#${colors.bg}`, color: `#${colors.text}`, borderColor: `#${colors.bg}` }
-          : { borderColor: `#${colors.bg}55` }
+          ? { background: `#${bg}`, color: `#${fg}`, borderColor: `#${bg}` }
+          : { borderColor: `#${bg}55` }
       }
     >
       {logo ? (
         <Image
           src={logo}
-          alt={`Ligne ${code}`}
+          alt={`Ligne ${line.code}`}
           width={28}
           height={28}
           unoptimized
@@ -44,7 +46,7 @@ function LineBadge({
           style={{ filter: active ? "none" : "grayscale(80%) opacity(0.6)" }}
         />
       ) : (
-        <span className="line-badge__label">{lineDisplayName(code)}</span>
+        <span className="line-badge__label">{line.name}</span>
       )}
     </button>
   );
@@ -52,22 +54,26 @@ function LineBadge({
 
 function LineGroup({
   title,
-  codes,
+  lines,
   selected,
   onToggle,
 }: {
   title: string;
-  codes: readonly string[];
+  lines: LineInfo[];
   selected: string[];
   onToggle: (code: string) => void;
 }) {
-  const allSelected = codes.every((c) => selected.includes(c));
+  const allSelected = lines.length > 0 && lines.every((l) => selected.includes(l.code));
 
   const toggleAll = () => {
     if (allSelected) {
-      codes.forEach(onToggle);
+      lines.forEach((l) => {
+        if (selected.includes(l.code)) onToggle(l.code);
+      });
     } else {
-      codes.filter((c) => !selected.includes(c)).forEach(onToggle);
+      lines.forEach((l) => {
+        if (!selected.includes(l.code)) onToggle(l.code);
+      });
     }
   };
 
@@ -80,12 +86,12 @@ function LineGroup({
         </button>
       </div>
       <div className="line-group__badges">
-        {codes.map((code) => (
+        {lines.map((line) => (
           <LineBadge
-            key={code}
-            code={code}
-            active={selected.includes(code)}
-            onClick={() => onToggle(code)}
+            key={line.code}
+            line={line}
+            active={selected.includes(line.code)}
+            onClick={() => onToggle(line.code)}
           />
         ))}
       </div>
@@ -93,7 +99,7 @@ function LineGroup({
   );
 }
 
-export default function LineSelector({ selected, onChange }: Props) {
+export default function LineSelector({ lines, selected, onChange }: Props) {
   const toggle = (code: string) => {
     if (selected.includes(code)) {
       onChange(selected.filter((c) => c !== code));
@@ -103,6 +109,10 @@ export default function LineSelector({ selected, onChange }: Props) {
   };
 
   const clearAll = () => onChange([]);
+
+  const metroLines = lines.filter((l) => l.mode === "metro");
+  const rerLines = lines.filter((l) => l.mode === "rer");
+  const transilienLines = lines.filter((l) => l.mode === "transilien");
 
   return (
     <section className="line-selector" aria-label="Sélection des lignes">
@@ -115,9 +125,15 @@ export default function LineSelector({ selected, onChange }: Props) {
         )}
       </div>
 
-      <LineGroup title="Métro" codes={LINE_GROUPS.metro} selected={selected} onToggle={toggle} />
-      <LineGroup title="RER" codes={LINE_GROUPS.rer} selected={selected} onToggle={toggle} />
-      <LineGroup title="Transilien" codes={LINE_GROUPS.transilien} selected={selected} onToggle={toggle} />
+      {metroLines.length > 0 && (
+        <LineGroup title="Métro" lines={metroLines} selected={selected} onToggle={toggle} />
+      )}
+      {rerLines.length > 0 && (
+        <LineGroup title="RER" lines={rerLines} selected={selected} onToggle={toggle} />
+      )}
+      {transilienLines.length > 0 && (
+        <LineGroup title="Transilien" lines={transilienLines} selected={selected} onToggle={toggle} />
+      )}
     </section>
   );
 }

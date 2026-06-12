@@ -31,13 +31,41 @@ def _cache_get(cache: dict, key: str) -> dict | list | None:
     return None
 
 
+MAX_CACHE_SIZE = 512
+
+
 def _cache_set(cache: dict, key: str, value, ttl: float) -> None:
+    if len(cache) >= MAX_CACHE_SIZE:
+        now = time.monotonic()
+        expired_keys = [k for k, v in cache.items() if now >= v[1]]
+        for k in expired_keys:
+            cache.pop(k, None)
+        while len(cache) >= MAX_CACHE_SIZE:
+            first_key = next(iter(cache))
+            cache.pop(first_key, None)
     cache[key] = (value, time.monotonic() + ttl)
 
 
 # ── Public functions ───────────────────────────────────────────────────────────
 
-async def fetch_line_reports(navitia_id: str, api_key: str) -> dict:
+async def _get_with_fallback(
+    url: str,
+    headers: dict,
+    params: dict | None = None,
+    timeout: float = 10.0,
+    client: httpx.AsyncClient | None = None,
+) -> httpx.Response:
+    if client is not None:
+        return await client.get(url, headers=headers, params=params, timeout=timeout)
+    async with httpx.AsyncClient(timeout=timeout) as local_client:
+        return await local_client.get(url, headers=headers, params=params)
+
+
+async def fetch_line_reports(
+    navitia_id: str,
+    api_key: str,
+    client: httpx.AsyncClient | None = None,
+) -> dict:
     """
     Fetch the line_reports payload for one line.
     navitia_id: short code like 'C01374' (without the 'line:IDFM:' prefix).
@@ -52,16 +80,20 @@ async def fetch_line_reports(navitia_id: str, api_key: str) -> dict:
     url = f"{NAVITIA_BASE}/line_reports/lines/{quote(full_id, safe='')}/line_reports"
 
     logger.info("Fetching line_reports for %s", navitia_id)
-    async with httpx.AsyncClient(timeout=12.0) as client:
-        resp = await client.get(url, headers={"apikey": api_key})
-        resp.raise_for_status()
-        data: dict = resp.json()
+    resp = await _get_with_fallback(url, headers={"apikey": api_key}, timeout=12.0, client=client)
+    resp.raise_for_status()
+    data: dict = resp.json()
 
     _cache_set(_line_reports_cache, navitia_id, data, LINE_REPORTS_TTL)
     return data
 
 
-async def fetch_places(q: str, api_key: str, count: int = 15) -> list:
+async def fetch_places(
+    q: str,
+    api_key: str,
+    count: int = 15,
+    client: httpx.AsyncClient | None = None,
+) -> list:
     """
     Search for stop areas matching the query string.
     Returns a list of Navitia 'place' objects.
@@ -79,16 +111,20 @@ async def fetch_places(q: str, api_key: str, count: int = 15) -> list:
         "disable_geojson": "true",
     }
 
-    async with httpx.AsyncClient(timeout=8.0) as client:
-        resp = await client.get(url, headers={"apikey": api_key}, params=params)
-        resp.raise_for_status()
-        places: list = resp.json().get("places", [])
+    resp = await _get_with_fallback(url, headers={"apikey": api_key}, params=params, timeout=8.0, client=client)
+    resp.raise_for_status()
+    places: list = resp.json().get("places", [])
 
     _cache_set(_places_cache, cache_key, places, PLACES_TTL)
     return places
 
 
-async def fetch_journeys(from_id: str, to_id: str, api_key: str) -> dict:
+async def fetch_journeys(
+    from_id: str,
+    to_id: str,
+    api_key: str,
+    client: httpx.AsyncClient | None = None,
+) -> dict:
     """
     Fetch journeys between from_id and to_id.
     Returns the raw JSON dict from Navitia.
@@ -107,10 +143,9 @@ async def fetch_journeys(from_id: str, to_id: str, api_key: str) -> dict:
     }
 
     logger.info("Fetching journeys from %s to %s", from_id, to_id)
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.get(url, headers={"apikey": api_key}, params=params)
-        resp.raise_for_status()
-        data: dict = resp.json()
+    resp = await _get_with_fallback(url, headers={"apikey": api_key}, params=params, timeout=15.0, client=client)
+    resp.raise_for_status()
+    data: dict = resp.json()
 
     _cache_set(_journeys_cache, cache_key, data, JOURNEYS_TTL)
     return data

@@ -4,6 +4,7 @@ Works entirely from DisruptionDetail data — no Navitia calls needed.
 """
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
 from icalendar import Calendar, Event
 
@@ -55,7 +56,6 @@ def build_ics_bytes(
     cal.add_component(event)
     return cal.to_ical()
 
-
 def build_google_calendar_url(
     summary: str,
     date_debut: str,
@@ -77,20 +77,20 @@ def build_google_calendar_url(
     def to_gc(iso_str: str) -> str:
         return _parse_iso(iso_str).strftime(DATE_FORMAT)
 
-    title = summary.replace(" ", "+").replace("—", "-")
     dates = f"{to_gc(date_debut)}/{to_gc(date_fin)}"
 
-    url = (
-        "https://calendar.google.com/calendar/render"
-        f"?action=TEMPLATE&text={title}&dates={dates}&ctz=Europe/Paris"
-    )
+    params = {
+        "action": "TEMPLATE",
+        "text": summary,
+        "dates": dates,
+        "ctz": "Europe/Paris",
+    }
 
     if description:
         # Cap description length for URL safety
-        safe_desc = description[:400].replace(" ", "+").replace("&", "%26")
-        url += f"&details={safe_desc}"
+        params["details"] = description[:400]
 
-    return url
+    return f"https://calendar.google.com/calendar/render?{urlencode(params)}"
 
 
 def build_bulk_ics_bytes(disruptions: list) -> bytes:
