@@ -8,22 +8,29 @@ export interface LineInfo {
   logo_url: string;
 }
 
+export interface DisruptionPeriod {
+  period_index: number;
+  date_debut: string;
+  date_fin: string;
+}
+
 export interface DisruptionDetail {
   id: string;
   impact_id: string;
-  period_index: number;
   line_code: string;
   line_navitia_id: string;
   line_name: string;
   line_color: string;
   line_text_color: string;
   summary: string;
-  date_debut: string;  // ISO 8601
-  date_fin: string;    // ISO 8601
+  date_debut: string;  // ISO 8601 of earliest period
+  date_fin: string;    // ISO 8601 of earliest period
   text: string;
   stations: string;
   cause: string;
   effect: string;
+  impacts_itinerary?: boolean;
+  periods: DisruptionPeriod[];
 }
 
 export interface PlaceResult {
@@ -49,9 +56,11 @@ export interface JourneyItinerary {
   departure_time: string;
   arrival_time: string;
   sections: ItinerarySection[];
+  impacted_disruption_ids: string[];
 }
 
 export interface JourneyDisruptionResponse {
   itinerary: JourneyItinerary | null;
+  itineraries: JourneyItinerary[];
   disruptions: DisruptionDetail[];
 }

@@ -1,12 +1,22 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { DisruptionDetail, PlaceResult, JourneyItinerary, LineInfo } from "@/lib/types";
 import { api } from "@/lib/api";
 import { causeLabel, effectLabel } from "@/lib/utils";
 import LineSelector from "@/components/LineSelector";
 import DisruptionCard from "@/components/DisruptionCard";
 import DisruptionCalendar from "@/components/DisruptionCalendar";
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleString("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 export default function Home() {
   const [selectedLines, setSelectedLines] = useState<string[]>(["1", "4", "A"]);
@@ -21,14 +31,17 @@ export default function Home() {
   const [toPlace, setToPlace] = useState<PlaceResult | null>(null);
   const [isJourneyMode, setIsJourneyMode] = useState(false);
   const [journeyDisruptions, setJourneyDisruptions] = useState<DisruptionDetail[]>([]);
-  const [activeItinerary, setActiveItinerary] = useState<JourneyItinerary | null>(null);
+  const [itineraries, setItineraries] = useState<JourneyItinerary[]>([]);
+  const [activeItineraryIndex, setActiveItineraryIndex] = useState<number>(0);
 
   // Filters state
   const [hidePastEvents, setHidePastEvents] = useState<boolean>(true);
   const [effectFilter, setEffectFilter] = useState<string>("ALL");
+  const [onlyDirectImpacts, setOnlyDirectImpacts] = useState<boolean>(true);
 
   // Modal event detail state
   const [activeDisruption, setActiveDisruption] = useState<DisruptionDetail | null>(null);
+  const [modalPeriodIndex, setModalPeriodIndex] = useState<number>(-1);
 
   // Fetch available lines metadata once on mount
   useEffect(() => {
@@ -76,7 +89,9 @@ export default function Home() {
     try {
       const data = await api.getJourneyDisruptions(fromPlace.id, toPlace.id);
       setJourneyDisruptions(data.disruptions);
-      setActiveItinerary(data.itinerary);
+      const parsedItineraries = data.itineraries || (data.itinerary ? [data.itinerary] : []);
+      setItineraries(parsedItineraries);
+      setActiveItineraryIndex(0);
     } catch (err) {
       setError("Échec du calcul d'itinéraire ou de chargement des perturbations.");
       console.error(err);
@@ -90,10 +105,23 @@ export default function Home() {
     setFromPlace(null);
     setToPlace(null);
     setJourneyDisruptions([]);
-    setActiveItinerary(null);
+    setItineraries([]);
+    setActiveItineraryIndex(0);
   };
 
+  const activeItinerary = itineraries[activeItineraryIndex] ?? null;
   const currentDisruptions = isJourneyMode ? journeyDisruptions : disruptions;
+
+  // Helper to check if a disruption impacts the currently active route itinerary
+  const getDisruptionImpactsActiveRoute = (d: DisruptionDetail) => {
+    if (!isJourneyMode || !activeItinerary) return true;
+    const impactedIds = activeItinerary.impacted_disruption_ids ?? [];
+    return (
+      impactedIds.includes(d.id) ||
+      impactedIds.includes(d.impact_id) ||
+      impactedIds.some((id) => id.startsWith(d.impact_id))
+    );
+  };
 
   // Apply filters to currentDisruptions
   const filteredDisruptions = currentDisruptions.filter((d) => {
@@ -106,8 +134,17 @@ export default function Home() {
     if (effectFilter !== "ALL" && d.effect !== effectFilter) {
       return false;
     }
+    if (isJourneyMode && onlyDirectImpacts && !getDisruptionImpactsActiveRoute(d)) {
+      return false;
+    }
     return true;
   });
+
+  // Map disruption models with dynamic path impacts before rendering cards
+  const disruptionsToRender = filteredDisruptions.map((d) => ({
+    ...d,
+    impacts_itinerary: isJourneyMode ? getDisruptionImpactsActiveRoute(d) : undefined,
+  }));
 
   // Bulk Export ICS URL
   const bulkIcsUrl = filteredDisruptions.length > 0
@@ -116,6 +153,17 @@ export default function Home() {
         filteredDisruptions.map((d) => d.line_code)
       )
     : "#";
+
+  // Handle opening the details modal from calendar click with specific period
+  const handleCalendarEventClick = (d: DisruptionDetail, periodIndex: number) => {
+    setActiveDisruption(d);
+    setModalPeriodIndex(periodIndex);
+  };
+
+  const handleCardClick = (d: DisruptionDetail) => {
+    setActiveDisruption(d);
+    setModalPeriodIndex(d.periods && d.periods.length > 1 ? -1 : (d.periods?.[0]?.period_index ?? 0));
+  };
 
   return (
     <div className="app-container">
@@ -180,7 +228,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Line Selector (Only relevant/active if not in journey mode) */}
+          {/* Line Selector */}
           <div className={`card panel ${isJourneyMode ? "panel--disabled" : ""}`}>
             {isJourneyMode && (
               <div className="panel__overlay">
@@ -240,6 +288,21 @@ export default function Home() {
               </label>
             </div>
 
+            {isJourneyMode && (
+              <div className="filter-item">
+                <input
+                  id="only-direct-impacts-checkbox"
+                  type="checkbox"
+                  className="filter-checkbox"
+                  checked={onlyDirectImpacts}
+                  onChange={(e) => setOnlyDirectImpacts(e.target.checked)}
+                />
+                <label htmlFor="only-direct-impacts-checkbox" className="filter-label" title="Afficher uniquement les perturbations touchant les stations de mon trajet calculé">
+                  Uniquement sur mon trajet
+                </label>
+              </div>
+            )}
+
             <div className="filter-item">
               <label htmlFor="effect-filter-select" className="filter-label">
                 Filtrer par impact :
@@ -275,13 +338,81 @@ export default function Home() {
               </div>
             )}
 
-            {/* Proposed Itinerary Routing display */}
+            {/* Alternative itineraries tab selector */}
+            {!loading && !error && itineraries.length > 0 && (
+              <div className="itineraries-selector" style={{ marginBottom: "20px" }}>
+                <h3 style={{ fontSize: "1.05rem", fontWeight: "600", color: "#8a99ad", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span>🗺️</span> Trajets proposés ({itineraries.length} options disponibles) :
+                </h3>
+                <div style={{ display: "flex", gap: "12px", overflowX: "auto", paddingBottom: "10px" }}>
+                  {itineraries.map((it, idx) => {
+                    const durationMin = Math.round(it.duration / 60);
+                    const depTime = new Date(it.departure_time).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+                    const arrTime = new Date(it.arrival_time).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+                    const isSelected = idx === activeItineraryIndex;
+
+                    const linesUsed = it.sections
+                      .filter(s => s.type === "public_transport" && s.line_code)
+                      .map(s => s.line_code);
+
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => setActiveItineraryIndex(idx)}
+                        style={{
+                          background: isSelected ? "rgba(255, 255, 255, 0.12)" : "rgba(255, 255, 255, 0.04)",
+                          border: isSelected ? "1px solid rgba(255, 255, 255, 0.35)" : "1px solid rgba(255, 255, 255, 0.1)",
+                          borderRadius: "8px",
+                          padding: "12px 18px",
+                          color: "#f8fafc",
+                          cursor: "pointer",
+                          textAlign: "left",
+                          minWidth: "180px",
+                          transition: "all 0.25s ease",
+                          boxShadow: isSelected ? "0 4px 16px rgba(0, 0, 0, 0.25)" : "none",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                          <span style={{ fontWeight: "700", fontSize: "1.1rem" }}>{durationMin} min</span>
+                          <span style={{ fontSize: "0.7rem", fontWeight: "600", color: isSelected ? "#38bdf8" : "#8a99ad", textTransform: "uppercase" }}>
+                            Option {idx + 1}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: "0.8rem", color: "#94a3b8", marginBottom: "8px" }}>
+                          {depTime} - {arrTime}
+                        </div>
+                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                          {linesUsed.map((lc, lIdx) => (
+                            <span
+                              key={lIdx}
+                              style={{
+                                fontSize: "0.7rem",
+                                fontWeight: "700",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                background: "rgba(255, 255, 255, 0.15)",
+                                color: "#f8fafc"
+                              }}
+                            >
+                              {lc}
+                            </span>
+                          ))}
+                          {linesUsed.length === 0 && <span style={{ fontSize: "0.7rem", color: "#8a99ad" }}>🚶 Marche</span>}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Proposed Itinerary Timeline routing */}
             {!loading && !error && activeItinerary && (
-              <div className="card itinerary-card">
+              <div className="card itinerary-card" style={{ marginTop: "8px", marginBottom: "24px" }}>
                 <div className="itinerary-header">
                   <div className="itinerary-title">
                     <span>🗺️</span>
-                    <h3>Itinéraire proposé</h3>
+                    <h3>Détails du trajet</h3>
                   </div>
                   <div className="itinerary-time">
                     <span className="itinerary-duration">{Math.round(activeItinerary.duration / 60)} min</span>
@@ -354,15 +485,17 @@ export default function Home() {
               <>
                 {viewMode === "list" ? (
                   <div className="disruption-list">
-                    {filteredDisruptions.map((d) => (
-                      <DisruptionCard key={d.id} disruption={d} />
+                    {disruptionsToRender.map((d) => (
+                      <div key={d.id} onClick={() => handleCardClick(d)} style={{ cursor: "pointer" }}>
+                        <DisruptionCard disruption={d} />
+                      </div>
                     ))}
                   </div>
                 ) : (
                   <div className="card calendar-card">
                     <DisruptionCalendar
                       disruptions={filteredDisruptions}
-                      onEventClick={setActiveDisruption}
+                      onEventClick={handleCalendarEventClick}
                     />
                   </div>
                 )}
@@ -394,13 +527,44 @@ export default function Home() {
 
             <div className="modal__body">
               <h4 className="modal__summary">{activeDisruption.summary.split(" — ").slice(1).join(" — ")}</h4>
-              
+
+              {/* Modal Period Selector */}
+              {activeDisruption.periods && activeDisruption.periods.length > 1 && (
+                <div style={{ marginBottom: "16px", background: "rgba(255,255,255,0.03)", padding: "10px 14px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <label htmlFor="modal-period-select" style={{ fontSize: "0.85rem", color: "#94a3b8", marginRight: "10px" }}>
+                    🗓️ Choisir une date pour l'export :
+                  </label>
+                  <select
+                    id="modal-period-select"
+                    value={modalPeriodIndex}
+                    onChange={(e) => setModalPeriodIndex(Number(e.target.value))}
+                    style={{
+                      background: "rgba(15, 23, 42, 0.6)",
+                      border: "1px solid rgba(255, 255, 255, 0.15)",
+                      borderRadius: "6px",
+                      color: "#f8fafc",
+                      padding: "5px 10px",
+                      fontSize: "0.85rem",
+                      cursor: "pointer",
+                      outline: "none"
+                    }}
+                  >
+                    <option value={-1}>Toutes les dates ({activeDisruption.periods.length} occurrences)</option>
+                    {activeDisruption.periods.map((p, idx) => (
+                      <option key={idx} value={p.period_index}>
+                        Date {idx + 1}: du {formatDate(p.date_debut)} au {formatDate(p.date_fin)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="modal__meta-grid">
                 <div>
-                  <strong>🗓 Début:</strong> {new Date(activeDisruption.date_debut).toLocaleString("fr-FR")}
+                  <strong>🗓 Début:</strong> {formatDate(modalPeriodIndex === -1 ? activeDisruption.date_debut : (activeDisruption.periods.find(p => p.period_index === modalPeriodIndex)?.date_debut ?? activeDisruption.date_debut))}
                 </div>
                 <div>
-                  <strong>🗓 Fin:</strong> {new Date(activeDisruption.date_fin).toLocaleString("fr-FR")}
+                  <strong>🗓 Fin:</strong> {formatDate(modalPeriodIndex === -1 ? activeDisruption.date_fin : (activeDisruption.periods.find(p => p.period_index === modalPeriodIndex)?.date_fin ?? activeDisruption.date_fin))}
                 </div>
                 {activeDisruption.stations !== "toute la ligne" && (
                   <div className="modal__meta-full">
@@ -420,25 +584,60 @@ export default function Home() {
 
             <footer className="modal__footer">
               <a
-                href={api.getIcsUrl(activeDisruption.impact_id, activeDisruption.line_code, activeDisruption.period_index)}
+                href={api.getIcsUrl(activeDisruption.impact_id, activeDisruption.line_code, modalPeriodIndex === -1 ? null : modalPeriodIndex)}
                 download
                 className="btn btn--ics"
+                title={modalPeriodIndex === -1 ? "Télécharger toutes les occurrences" : "Télécharger pour la date sélectionnée"}
               >
-                Exporter (ICS)
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style={{ marginRight: "4px" }}>
+                  <path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/>
+                </svg>
+                {modalPeriodIndex === -1 && activeDisruption.periods && activeDisruption.periods.length > 1 ? "Outlook groupé (ICS)" : "Outlook (ICS)"}
               </a>
-              <button
-                className="btn btn--gcal"
-                onClick={async () => {
-                  const url = await api.getGoogleCalendarUrl(
-                    activeDisruption.impact_id,
-                    activeDisruption.line_code,
-                    activeDisruption.period_index
-                  );
-                  window.open(url, "_blank", "noopener,noreferrer");
-                }}
+
+              <a
+                href={api.getIcsUrl(activeDisruption.impact_id, activeDisruption.line_code, modalPeriodIndex === -1 ? null : modalPeriodIndex)}
+                download
+                className="btn btn--apple"
+                title={modalPeriodIndex === -1 ? "Ajouter toutes les occurrences à Apple Calendar" : "Ajouter à Apple Calendar"}
               >
-                Google Calendar
-              </button>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style={{ marginRight: "4px" }}>
+                  <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.07 2.47.3 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 4.17c.66-.81 1.11-1.93.99-3.06-.96.05-2.13.65-2.82 1.47-.6.7-1.13 1.84-.99 2.94.1.08.2.12.31.12.9 0 2.01-.54 2.51-1.47z"/>
+                </svg>
+                {modalPeriodIndex === -1 && activeDisruption.periods && activeDisruption.periods.length > 1 ? "Apple groupé (iCal)" : "Apple Calendar"}
+              </a>
+
+              {modalPeriodIndex === -1 && activeDisruption.periods && activeDisruption.periods.length > 1 ? (
+                <button
+                  className="btn btn--gcal"
+                  style={{ opacity: 0.5, cursor: "not-allowed" }}
+                  disabled
+                  title="L'import Google Calendar s'effectue date par date. Veuillez choisir une date spécifique."
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style={{ marginRight: "4px" }}>
+                    <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11zM7 11h5v5H7z"/>
+                  </svg>
+                  Google Calendar
+                </button>
+              ) : (
+                <button
+                  className="btn btn--gcal"
+                  title="Ajouter à Google Calendar"
+                  onClick={async () => {
+                    const url = await api.getGoogleCalendarUrl(
+                      activeDisruption.impact_id,
+                      activeDisruption.line_code,
+                      modalPeriodIndex === -1 ? 0 : modalPeriodIndex
+                    );
+                    window.open(url, "_blank", "noopener,noreferrer");
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style={{ marginRight: "4px" }}>
+                    <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11zM7 11h5v5H7z"/>
+                  </svg>
+                  Google Calendar
+                </button>
+              )}
             </footer>
           </div>
         </div>
@@ -512,7 +711,6 @@ function PlaceAutocomplete({
             if (results.length > 0) setIsOpen(true);
           }}
           onBlur={() => {
-            // Slight timeout to let click item register before dropdown vanishes
             setTimeout(() => setIsOpen(false), 200);
           }}
         />

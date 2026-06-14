@@ -92,49 +92,49 @@ LINE_REGISTRY: dict[str, LineInfo] = {
     ),
     "C": LineInfo(
         "C01728", "C", "RER C", "rer", "FFEA00", "000000",
-        f"{_WIKI_FULL}/e/e4/Paris_transit_icons_-_RER_C.svg",
+        f"{_WIKI_FULL}/f/f6/Paris_transit_icons_-_RER_C.svg",
     ),
     "D": LineInfo(
         "C01729", "D", "RER D", "rer", "00A06E", "FFFFFF",
-        f"{_WIKI_FULL}/4/4d/Paris_transit_icons_-_RER_D.svg",
+        f"{_WIKI_FULL}/5/54/Paris_transit_icons_-_RER_D.svg",
     ),
     "E": LineInfo(
         "C01740", "E", "RER E", "rer", "B93684", "FFFFFF",
-        f"{_WIKI_FULL}/2/25/Paris_transit_icons_-_RER_E.svg",
+        f"{_WIKI_FULL}/a/a8/Paris_transit_icons_-_RER_E.svg",
     ),
     # ── Transilien ─────────────────────────────────────────────────────────
     # TODO: verify navitia_ids for Transilien lines via API
     "H": LineInfo(
         "C01570", "H", "Transilien H", "transilien", "6E6E00", "FFFFFF",
-        f"{_WIKI_FULL}/d/d6/Paris_transit_icons_-_Train_H.svg",
+        f"{_WIKI_FULL}/8/84/Paris_transit_icons_-_Train_H.svg",
     ),
     "J": LineInfo(
         "C01571", "J", "Transilien J", "transilien", "C9A71C", "FFFFFF",
-        f"{_WIKI_FULL}/a/a5/Paris_transit_icons_-_Train_J.svg",
+        f"{_WIKI_FULL}/0/0b/Paris_transit_icons_-_Train_J.svg",
     ),
     "K": LineInfo(
         "C01572", "K", "Transilien K", "transilien", "9F9825", "FFFFFF",
-        f"{_WIKI_FULL}/5/58/Paris_transit_icons_-_Train_K.svg",
+        f"{_WIKI_FULL}/f/f3/Paris_transit_icons_-_Train_K.svg",
     ),
     "L": LineInfo(
         "C01573", "L", "Transilien L", "transilien", "8DB7C8", "000000",
-        f"{_WIKI_FULL}/b/b9/Paris_transit_icons_-_Train_L.svg",
+        f"{_WIKI_FULL}/8/81/Paris_transit_icons_-_Train_L.svg",
     ),
     "N": LineInfo(
         "C01574", "N", "Transilien N", "transilien", "004899", "FFFFFF",
-        f"{_WIKI_FULL}/f/f0/Paris_transit_icons_-_Train_N.svg",
+        f"{_WIKI_FULL}/4/43/Paris_transit_icons_-_Train_N.svg",
     ),
     "P": LineInfo(
         "C01575", "P", "Transilien P", "transilien", "F0A500", "FFFFFF",
-        f"{_WIKI_FULL}/4/41/Paris_transit_icons_-_Train_P.svg",
+        f"{_WIKI_FULL}/c/c7/Paris_transit_icons_-_Train_P.svg",
     ),
     "R": LineInfo(
         "C01576", "R", "Transilien R", "transilien", "E87B10", "FFFFFF",
-        f"{_WIKI_FULL}/6/69/Paris_transit_icons_-_Train_R.svg",
+        f"{_WIKI_FULL}/f/fb/Paris_transit_icons_-_Train_R.svg",
     ),
     "U": LineInfo(
         "C01577", "U", "Transilien U", "transilien", "CE007C", "FFFFFF",
-        f"{_WIKI_FULL}/9/9d/Paris_transit_icons_-_Train_U.svg",
+        f"{_WIKI_FULL}/d/df/Paris_transit_icons_-_Train_U.svg",
     ),
 }
 

@@ -110,3 +110,51 @@ We have successfully performed a full security, reliability, and maintainability
 - Refined the fast-path check in `_navitia_dt_to_iso` to require the presence of a hyphen (`"-"`), guaranteeing that it only skips parsing if the date is already in standard hyphenated-and-colon-separated format (e.g., `"2026-07-06T04:45:00"`).
 - All compact representations are now correctly routed to the custom formatter and returned as fully standard, browser-friendly ISO-8601 strings.
 - Rebuilt and verified backend and frontend containers, confirming that dates are now cleanly and accurately displayed in the UI.
+
+---
+
+## Phase 2: Fine-Grained Itinerary Filtering & Reason Extraction
+
+We have successfully designed and delivered Phase 2 enhancements, which focus on fine-grained route filtering and exposing detailed disruption reasons directly to the user:
+
+### 1. High-Fidelity Disruption Reason Parsing (Backend)
+- Modified `_extract_text` and `_extract_summary` in `src/domain/disruptions.py` to prioritize the official `"moteur"` channel from the Navitia payload.
+- This ensures the exact reason/cause of the disruption (e.g., specific work details, why a branch is interrupted) is fully extracted and returned, falling back gracefully to `"notification"` or general titles if `"moteur"` is not populated.
+- Added the `impacts_itinerary: bool | None` property to the Pydantic domain models to denote whether a given disruption directly intersects with the user's specific travel itinerary stations.
+
+### 2. Full-Context Journey-Line Disruptions (Backend)
+- Refactored the `/journey-disruptions` endpoint in `src/main.py` to return **all** active disruptions happening on the transit lines utilized in the calculated itinerary.
+- Dynamically ran `filter_for_journey()` on the line's full disruption list to distinguish directly-impacted disruptions (`impacts_itinerary = True`) from other disruptions on the same line that do not touch any of the user's journey stops (`impacts_itinerary = False`).
+
+### 3. "Uniquement sur mon trajet" Smart Filter (Frontend)
+- Added the client-side state `onlyDirectImpacts` (default `true`) and integrated the new premium checkbox toggle **"Uniquement sur mon trajet"** inside the sticky filter bar in `frontend/app/page.tsx`.
+- Under journey planner mode, this checkbox dynamically filters out disruptions that have `impacts_itinerary === false`, giving the user the best of both worlds: complete isolation of their specific travel path, or a broader view of the entire lines.
+
+### 4. Zero-Tap Detailed Disruption Descriptions (Frontend)
+- Redesigned `frontend/components/DisruptionCard.tsx` to display the fully-extracted disruption text (`disruption.text`) directly as always-visible body content on the card. This removes the manual "Voir le détail" click-to-expand step, immediately giving the user all information on why the disruption is occurring.
+- Added a gorgeous, dashed gray-bordered `"Hors trajet"` badge inside the card metadata header whenever `disruption.impacts_itinerary === false`, cleanly labeling disruptions that are on the same line but outside the active route stops.
+- Registered custom styling properties for `.disruption-card__outside-badge` in `frontend/app/globals.css`.
+
+### 5. Native Apple Calendar (iCal) Support
+- Added a dedicated **"Apple Calendar"** export button alongside Microsoft Outlook and Google Calendar.
+- This button targets Apple's native calendar subsystem by delivering a standard `.ics` file with fully compatible UTF-8 parameters, enabling iOS and macOS users to tap and instantly import the disruption events into their system calendars.
+- Leveraged the official Apple brand logo rendered inside a crisp SVG wrapper.
+- Styled with a translucent red glassmorphic button layout (`.btn--apple` custom color token in `frontend/app/globals.css`) that complements the IDFM brand dashboard visual system.
+
+---
+
+## Phase 3: Hotfixes & Docker Build Successful Compilation
+
+### 1. JSX Typo Resolution (`frontend/app/page.tsx`)
+- **Problem**: Next.js production build broke because the modal's footer block `<footer className="modal__footer">` at line 585 was closed with `</header>` instead of `</footer>` at line 641, causing severe parser confusion.
+- **Solution**: Corrected the mismatched closing tag to `</footer>`.
+
+### 2. TypeScript Compilation Fix (`frontend/components/DisruptionCalendar.tsx`)
+- **Problem**: TypeScript compiler threw a `Property 'period_index' does not exist on type 'DisruptionDetail'` error in the fallback mapping branch.
+- **Solution**: Since `DisruptionDetail` groups multiple occurrences into the `periods: DisruptionPeriod[]` array, a fallback calendar item has no dynamic period index. Replaced `d.period_index ?? 0` with a static `0` fallback in the event props.
+
+### 3. Clean Docker Orchestration
+- **Rebuilt**: Ran `wsl docker compose build`, completing with an exit code of `0`.
+- **Deployed**: Successfully executed `wsl docker compose up -d` to recreate and run both the `ratp-backend` and `ratp-frontend` containers in healthy, active states.
+
+

@@ -31,8 +31,9 @@ export const api = {
     return apiFetch<JourneyDisruptionResponse>("/journey-disruptions", { from: fromId, to: toId });
   },
 
-  getIcsUrl(impactId: string, lineCode: string, periodIndex: number): string {
-    return `${API_BASE}/disruptions/${encodeURIComponent(impactId)}/ics?line=${lineCode}&period=${periodIndex}`;
+  getIcsUrl(impactId: string, lineCode: string, periodIndex?: number | null): string {
+    const periodParam = (periodIndex !== undefined && periodIndex !== null && periodIndex >= 0) ? `&period=${periodIndex}` : '';
+    return `${API_BASE}/disruptions/${encodeURIComponent(impactId)}/ics?line=${lineCode}${periodParam}`;
   },
 
   getBulkIcsUrl(ids: string[], lines: string[]): string {

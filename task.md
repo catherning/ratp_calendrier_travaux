@@ -31,3 +31,16 @@
 - [x] Create unified `docker-compose.yml` orchestrating both services with healthchecks
 - [x] Add optimized `.dockerignore` filters for build context efficiency
 - [x] Spin up Docker Compose build to verify successful compilation of both containers
+
+## Phase 2: Fine-Grained Itinerary Filtering & Reason Extraction
+- [x] Separate Summary & Detail Extraction in `src/domain/disruptions.py` (prioritize "moteur" for detailed description and "notification"/"title" for short titles)
+- [x] Add `impacts_itinerary: bool | None = None` field to the `DisruptionDetail` Pydantic model
+- [x] Update `/journey-disruptions` in `src/main.py` to return all line disruptions with proper itinerary impact flags set by `filter_for_journey()`
+- [x] Add `impacts_itinerary?: boolean` to `DisruptionDetail` type definition in `frontend/lib/types.ts`
+- [x] Implement the client-side `onlyDirectImpacts` filter toggle ("Uniquement sur mon trajet") in `frontend/app/page.tsx`
+- [x] Render disruption description text always-visible and add "Hors trajet" header badge inside `frontend/components/DisruptionCard.tsx`
+- [x] Add custom glassmorphism styles for `.disruption-card__outside-badge` inside `frontend/app/globals.css`
+- [x] Add dedicated Apple Calendar export button (iCal formatted) in `frontend/components/DisruptionCard.tsx` and modal view in `frontend/app/page.tsx`
+- [x] Add `.btn--apple` custom color scheme in `frontend/app/globals.css` with a high-end red glassmorphic design and the official brand SVG icon
+
+

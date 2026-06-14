@@ -362,6 +362,16 @@ body {
   background: rgba(245, 158, 11, 0.25);
 }
 
+.btn--apple {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #f87171;
+}
+
+.btn--apple:hover {
+  background: rgba(239, 68, 68, 0.22);
+}
+
 .btn--bulk-ics {
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
   color: #ffffff;
@@ -606,6 +616,16 @@ body {
   color: #9ca3af;
   background: rgba(255, 255, 255, 0.05);
   padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.disruption-card__outside-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #9ca3af;
+  border: 1px dashed rgba(156, 163, 175, 0.4);
+  background: transparent;
+  padding: 0.15rem 0.45rem;
   border-radius: 4px;
 }
 

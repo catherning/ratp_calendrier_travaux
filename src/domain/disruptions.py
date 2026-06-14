@@ -3,6 +3,8 @@ Domain logic: disruption filtering, normalization, Pydantic models.
 Core logic ported and cleaned from the original backend_app.py.
 """
 import logging
+import re
+import unicodedata
 from datetime import datetime
 
 from bs4 import BeautifulSoup
@@ -24,14 +26,28 @@ IMPACTING_EFFECTS = {
 # Tags that indicate non-construction disruptions to ignore
 IGNORED_TAGS = {"ascenseur"}
 
+# Common French stop words and qualifiers in station names
+STOP_WORDS = {
+    "sur", "sous", "la", "le", "les", "du", "des", "de", "et", "en", "au", "aux", "un", "une",
+    "gare", "station", "rue", "avenue", "boulevard", "pont", "porte", "grand", "grande", "arche",
+    "saint", "sainte", "val", "vieux", "vieille", "port", "pre", "pres", "maison", "maisons"
+}
 
-# ── Pydantic model ─────────────────────────────────────────────────────────────
+
+# ── Pydantic models ────────────────────────────────────────────────────────────
+
+class DisruptionPeriod(BaseModel):
+    """An individual date/time range of a disruption occurrence."""
+    period_index: int
+    date_debut: str        # ISO 8601
+    date_fin: str          # ISO 8601
+
 
 class DisruptionDetail(BaseModel):
-    """A single disruption event (one application_period of a Navitia disruption)."""
-    id: str               # Compound: "{impact_id}__p{period_index}"
+    """A single disruption event, grouping all its active periods."""
+    id: str               # Compound ID: "{impact_id}__p{earliest_period_index}"
     impact_id: str        # Navitia impact UUID
-    period_index: int     # Which application_period this represents
+    period_index: int     # Earliest/active period index for backwards compatibility
 
     line_code: str        # e.g. "4", "A"
     line_navitia_id: str  # e.g. "C01374"
@@ -40,12 +56,14 @@ class DisruptionDetail(BaseModel):
     line_text_color: str  # Hex without #, e.g. "FFFFFF"
 
     summary: str          # Short title suitable for calendar event
-    date_debut: str       # ISO 8601: "2025-07-06T04:45:00"
-    date_fin: str         # ISO 8601: "2025-07-25T04:30:00"
+    date_debut: str       # ISO 8601 of earliest period
+    date_fin: str         # ISO 8601 of latest period
     text: str             # Full human-readable description
     stations: str         # "toute la ligne" or "Station A | Station B"
     cause: str            # "travaux" | "perturbation" | ...
     effect: str           # Navitia severity effect
+    impacts_itinerary: bool | None = None  # True if directly impacts search stops
+    periods: list[DisruptionPeriod] = []
 
 
 class ItinerarySection(BaseModel):
@@ -66,11 +84,13 @@ class JourneyItinerary(BaseModel):
     departure_time: str        # ISO timestamp
     arrival_time: str          # ISO timestamp
     sections: list[ItinerarySection]
+    impacted_disruption_ids: list[str] = []
 
 
 class JourneyDisruptionResponse(BaseModel):
-    """Unified response containing the journey's itinerary and relevant disruptions."""
+    """Unified response containing the journey's itineraries and relevant disruptions."""
     itinerary: JourneyItinerary | None = None
+    itineraries: list[JourneyItinerary] = []
     disruptions: list[DisruptionDetail]
 
 
@@ -81,13 +101,11 @@ def _navitia_dt_to_iso(navitia_dt: str) -> str:
     """
     Convert Navitia compact datetime to ISO 8601.
     '20260706T044500' → '2026-07-06T04:45:00'
-    Also handles '20260706T044500.000' and other ISO-like variants.
     """
     s = navitia_dt.strip()
     if not s:
         return s
 
-    # If already standard ISO 8601 (with dashes/hyphens), return it
     if "-" in s:
         try:
             datetime.fromisoformat(s)
@@ -95,13 +113,11 @@ def _navitia_dt_to_iso(navitia_dt: str) -> str:
         except ValueError:
             pass
 
-    # Try parsing compact Navitia formats
     try:
         clean_s = s.split(".")[0].replace("-", "").replace(":", "")
         dt = datetime.strptime(clean_s, "%Y%m%dT%H%M%S")
         return dt.isoformat()
     except Exception:
-        # Graceful fallback to manual string slicing
         try:
             if "T" in s:
                 date_part, time_part = s.split("T", 1)
@@ -117,25 +133,42 @@ def _navitia_dt_to_iso(navitia_dt: str) -> str:
         return s
 
 
-def _extract_text(disruption: dict) -> str:
-    """Extract the best human-readable text from a disruption's messages list."""
+def _extract_message_by_channel(disruption: dict, channel_names: list[str]) -> str:
     messages = disruption.get("messages", [])
-    if not messages:
-        return ""
-    preferred_channels = ["title", "notification", "moteur"]
-    for channel_name in preferred_channels:
+    for channel_name in channel_names:
         for msg in messages:
             if msg.get("channel", {}).get("name") == channel_name:
                 raw = msg.get("text", "")
-                return BeautifulSoup(raw, "html.parser").get_text(" ", strip=True)
-    return BeautifulSoup(messages[0].get("text", ""), "html.parser").get_text(" ", strip=True)
+                if raw:
+                    return BeautifulSoup(raw, "html.parser").get_text(" ", strip=True)
+    return ""
+
+
+def _extract_text(disruption: dict) -> str:
+    """Extract the best detailed explanation text from a disruption's messages list."""
+    detailed = _extract_message_by_channel(disruption, ["moteur"])
+    if not detailed:
+        detailed = _extract_message_by_channel(disruption, ["title", "notification", "titre", "cbiv"])
+    if not detailed:
+        messages = disruption.get("messages", [])
+        if messages:
+            detailed = BeautifulSoup(messages[0].get("text", ""), "html.parser").get_text(" ", strip=True)
+    return detailed or "Travaux impactant le trafic"
+
+
+def _extract_summary(disruption: dict) -> str:
+    """Extract a short, crisp summary title."""
+    summary = _extract_message_by_channel(disruption, ["title", "notification", "titre", "cbiv"])
+    if not summary:
+        detailed = _extract_text(disruption)
+        summary = detailed[:60] if detailed else "Travaux"
+    return summary
 
 
 def _extract_stations(disruption: dict) -> str:
     """Return 'StationA | StationB' or a list of specific stations, or 'toute la ligne'."""
     stations = []
 
-    # 1. First, check if there is an impacted section
     for obj in disruption.get("impacted_objects", []):
         section = obj.get("impacted_section")
         if section:
@@ -146,20 +179,17 @@ def _extract_stations(disruption: dict) -> str:
             if to_name and to_name not in stations:
                 stations.append(to_name)
 
-    # 2. Also collect individual impacted pt_objects (stop_areas or stop_points)
     for obj in disruption.get("impacted_objects", []):
         pt = obj.get("pt_object", {})
         if pt:
             name = pt.get("name", "").split("(")[0].strip()
             if name and name not in stations:
-                # Filter out line names like "RER A"
                 if not any(prefix in name for prefix in ["RER", "Métro", "Train", "Ligne"]):
                     stations.append(name)
 
     if stations:
         return " | ".join(stations)
     return "toute la ligne"
-
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
@@ -175,66 +205,16 @@ def is_relevant_disruption(disruption: dict) -> bool:
         return False
 
     cause = disruption.get("cause", "")
-    # "perturbation" (accidents, strikes, demonstrations) is not construction work
     if cause == "perturbation":
         return False
 
     return True
 
 
-def _period_to_detail(
-    disruption: dict,
-    period: dict,
-    period_idx: int,
-    line_info: LineInfo,
-) -> DisruptionDetail | None:
-    """Convert one application_period of a disruption to a DisruptionDetail."""
-    begin = period.get("begin", "")
-    end = period.get("end", "")
-
-    try:
-        date_debut = _navitia_dt_to_iso(begin)
-        date_fin = _navitia_dt_to_iso(end)
-        datetime.fromisoformat(date_debut)
-        datetime.fromisoformat(date_fin)
-    except (ValueError, IndexError, AttributeError):
-        logger.warning("Invalid period dates for disruption %s: %r / %r", disruption.get("id"), begin, end)
-        return None
-
-    text = _extract_text(disruption)
-    if not text:
-        text = "Travaux impactant le trafic"
-
-    stations = _extract_stations(disruption)
-    impact_id = disruption.get("impact_id") or disruption.get("id", "")
-
-    # Title: strip to 110 chars and sanitise forbidden chars
-    title = text[:110].replace("/", "-").replace("|", "-")
-    summary = f"Ligne {line_info.code} — {title}"
-
-    return DisruptionDetail(
-        id=f"{impact_id}__p{period_idx}",
-        impact_id=impact_id,
-        period_index=period_idx,
-        line_code=line_info.code,
-        line_navitia_id=line_info.navitia_id,
-        line_name=line_info.name,
-        line_color=line_info.color,
-        line_text_color=line_info.text_color,
-        summary=summary,
-        date_debut=date_debut,
-        date_fin=date_fin,
-        text=text,
-        stations=stations,
-        cause=disruption.get("cause", ""),
-        effect=disruption.get("severity", {}).get("effect", ""),
-    )
-
-
 def normalize_line_disruptions(raw: dict, line_info: LineInfo) -> list[DisruptionDetail]:
     """
-    Convert a raw Navitia line_reports payload into a flat list of DisruptionDetail,
-    one entry per relevant disruption × application_period.
+    Convert a raw Navitia line_reports payload into a list of DisruptionDetail.
+    Periods of the same disruption are grouped chronologically.
     """
     results: list[DisruptionDetail] = []
 
@@ -246,10 +226,59 @@ def normalize_line_disruptions(raw: dict, line_info: LineInfo) -> list[Disruptio
         if not periods:
             continue
 
+        parsed_periods = []
         for p_idx, period in enumerate(periods):
-            detail = _period_to_detail(disruption, period, p_idx, line_info)
-            if detail:
-                results.append(detail)
+            begin = period.get("begin", "")
+            end = period.get("end", "")
+            try:
+                date_debut = _navitia_dt_to_iso(begin)
+                date_fin = _navitia_dt_to_iso(end)
+                datetime.fromisoformat(date_debut)
+                datetime.fromisoformat(date_fin)
+                parsed_periods.append(DisruptionPeriod(
+                    period_index=p_idx,
+                    date_debut=date_debut,
+                    date_fin=date_fin
+                ))
+            except Exception:
+                logger.warning("Invalid period dates for disruption %s: %r / %r", disruption.get("id"), begin, end)
+                continue
+
+        if not parsed_periods:
+            continue
+
+        # Sort periods chronologically
+        parsed_periods.sort(key=lambda p: p.date_debut)
+
+        earliest_p = parsed_periods[0]
+        latest_p = parsed_periods[-1]
+
+        detailed_text = _extract_text(disruption)
+        short_summary = _extract_summary(disruption)
+        stations = _extract_stations(disruption)
+        impact_id = disruption.get("impact_id") or disruption.get("id", "")
+
+        clean_title = short_summary.replace("/", "-").replace("|", "-")
+        summary = f"Ligne {line_info.code} — {clean_title}"
+
+        results.append(DisruptionDetail(
+            id=f"{impact_id}__p{earliest_p.period_index}",
+            impact_id=impact_id,
+            period_index=earliest_p.period_index,
+            line_code=line_info.code,
+            line_navitia_id=line_info.navitia_id,
+            line_name=line_info.name,
+            line_color=line_info.color,
+            line_text_color=line_info.text_color,
+            summary=summary,
+            date_debut=earliest_p.date_debut,
+            date_fin=latest_p.date_fin,  # End date of the latest period for correct filtering
+            text=detailed_text,
+            stations=stations,
+            cause=disruption.get("cause", ""),
+            effect=disruption.get("severity", {}).get("effect", ""),
+            periods=parsed_periods
+        ))
 
     return results
 
@@ -268,16 +297,115 @@ def find_disruption_in_raw(
         periods = disruption.get("application_periods", [])
         if period_index >= len(periods):
             return None
-        return _period_to_detail(disruption, periods[period_index], period_index, line_info)
+        
+        # Build a single-period DisruptionDetail
+        p = periods[period_index]
+        begin = p.get("begin", "")
+        end = p.get("end", "")
+        try:
+            date_debut = _navitia_dt_to_iso(begin)
+            date_fin = _navitia_dt_to_iso(end)
+        except Exception:
+            continue
+
+        detailed_text = _extract_text(disruption)
+        short_summary = _extract_summary(disruption)
+        stations = _extract_stations(disruption)
+
+        clean_title = short_summary.replace("/", "-").replace("|", "-")
+        summary = f"Ligne {line_info.code} — {clean_title}"
+
+        return DisruptionDetail(
+            id=f"{impact_id}__p{period_index}",
+            impact_id=impact_id,
+            period_index=period_index,
+            line_code=line_info.code,
+            line_navitia_id=line_info.navitia_id,
+            line_name=line_info.name,
+            line_color=line_info.color,
+            line_text_color=line_info.text_color,
+            summary=summary,
+            date_debut=date_debut,
+            date_fin=date_fin,
+            text=detailed_text,
+            stations=stations,
+            cause=disruption.get("cause", ""),
+            effect=disruption.get("severity", {}).get("effect", ""),
+            periods=[DisruptionPeriod(period_index=period_index, date_debut=date_debut, date_fin=date_fin)]
+        )
+    return None
+
+
+def find_disruption_detail_with_all_periods(
+    raw: dict,
+    impact_id: str,
+    line_info: LineInfo,
+) -> DisruptionDetail | None:
+    """Look up a disruption by impact_id and return it with all its periods populated."""
+    for disruption in raw.get("disruptions", []):
+        d_impact_id = disruption.get("impact_id") or disruption.get("id", "")
+        if d_impact_id != impact_id:
+            continue
+        
+        periods = disruption.get("application_periods", [])
+        if not periods:
+            return None
+            
+        parsed_periods = []
+        for p_idx, p in enumerate(periods):
+            begin = p.get("begin", "")
+            end = p.get("end", "")
+            try:
+                date_debut = _navitia_dt_to_iso(begin)
+                date_fin = _navitia_dt_to_iso(end)
+                datetime.fromisoformat(date_debut)
+                datetime.fromisoformat(date_fin)
+                parsed_periods.append(DisruptionPeriod(
+                    period_index=p_idx,
+                    date_debut=date_debut,
+                    date_fin=date_fin
+                ))
+            except Exception:
+                continue
+                
+        if not parsed_periods:
+            return None
+            
+        parsed_periods.sort(key=lambda p: p.date_debut)
+        earliest_p = parsed_periods[0]
+        latest_p = parsed_periods[-1]
+        
+        detailed_text = _extract_text(disruption)
+        short_summary = _extract_summary(disruption)
+        stations = _extract_stations(disruption)
+        
+        clean_title = short_summary.replace("/", "-").replace("|", "-")
+        summary = f"Ligne {line_info.code} — {clean_title}"
+        
+        return DisruptionDetail(
+            id=f"{impact_id}__p{earliest_p.period_index}",
+            impact_id=impact_id,
+            period_index=earliest_p.period_index,
+            line_code=line_info.code,
+            line_navitia_id=line_info.navitia_id,
+            line_name=line_info.name,
+            line_color=line_info.color,
+            line_text_color=line_info.text_color,
+            summary=summary,
+            date_debut=earliest_p.date_debut,
+            date_fin=latest_p.date_fin,
+            text=detailed_text,
+            stations=stations,
+            cause=disruption.get("cause", ""),
+            effect=disruption.get("severity", {}).get("effect", ""),
+            periods=parsed_periods
+        )
     return None
 
 
 def _normalize_name(name: str) -> str:
-    import unicodedata
     name = name.lower().strip()
-    # Remove accents
     name = "".join(c for c in unicodedata.normalize('NFD', name) if unicodedata.category(c) != 'Mn')
-    # Replace dashes and other spacers with simple spaces
     name = name.replace("-", " ").replace("œ", "oe")
     return " ".join(name.split())
 
@@ -288,23 +416,80 @@ def filter_for_journey(
 ) -> list[DisruptionDetail]:
     """
     Filter disruptions to return only those that impact the journey's stops.
-    Each element in journey_stops has 'id' (stop point id) and 'name' (stop name).
+    Uses exact station matches first, then applies a robust text-analysis keyword
+    matching heuristic to filter out branch-specific disruptions (such as Western Cergy/Poissy
+    works for Eastern République/Nogent travelers).
     """
+    # Clean and normalize journey stop names
     journey_stop_names = {_normalize_name(s["name"]) for s in journey_stops if s.get("name")}
+    
+    # Extract significant words from the journey stops
+    significant_journey_words = set()
+    for name in journey_stop_names:
+        words = name.split()
+        for w in words:
+            if len(w) >= 3 and w not in STOP_WORDS:
+                significant_journey_words.add(w)
 
     filtered = []
     for d in disruptions:
-        # 1. Entire line disruptions are always relevant
-        if d.stations == "toute la ligne":
-            filtered.append(d)
+        # 1. If stations are explicitly specified and not "toute la ligne", use exact station matching
+        if d.stations != "toute la ligne":
+            disrupted_stations = [_normalize_name(s) for s in d.stations.split(" | ")]
+            if any(ds in journey_stop_names for ds in disrupted_stations):
+                filtered.append(d)
+                continue
+                
+            # Fallback to keyword matching on explicit stations to handle minor spelling or punctuation differences
+            disrupted_words = set()
+            for ds in disrupted_stations:
+                for w in ds.split():
+                    if len(w) >= 3 and w not in STOP_WORDS:
+                        disrupted_words.add(w)
+            if disrupted_words & significant_journey_words:
+                filtered.append(d)
+                continue
+                
             continue
 
-        # 2. Section disruptions (e.g. "Station A | Station B")
-        # Split by " | " and check if any station is in our journey
-        disrupted_stations = [_normalize_name(s) for s in d.stations.split(" | ")]
-        if any(ds in journey_stop_names for ds in disrupted_stations):
+        # 2. If stations is "toute la ligne", inspect the text/summary for localized indicators.
+        text_lower = _normalize_name(d.text + " " + d.summary)
+        
+        # Localized indicators in French
+        localized_indicators = [
+            "entre", "interrompu", "interruption", "fermeture", "ferme", "fermee", 
+            "travaux a", "uniquement", "non desservi", "non desservie", "sauf"
+        ]
+        
+        is_localized = any(indicator in text_lower for indicator in localized_indicators)
+        
+        if not is_localized:
+            # If there's no localized indicator, assume it's a line-wide disruption (strike, general delay, etc.)
             filtered.append(d)
             continue
+            
+        # If it is localized, check if any of our journey's significant words appear in the description
+        # We also allow general line-wide indicators in the text
+        line_wide_indicators = ["ensemble de la ligne", "toute la ligne", "toutes les gares", "toutes les stations"]
+        if any(lw in text_lower for lw in line_wide_indicators):
+            filtered.append(d)
+            continue
+            
+        # Match using exact word boundaries
+        has_matching_station = False
+        for word in significant_journey_words:
+            pattern = r'\b' + re.escape(word) + r'\b'
+            if re.search(pattern, text_lower):
+                has_matching_station = True
+                break
+                
+        if has_matching_station:
+            filtered.append(d)
+        else:
+            # Localized disruption on another branch of the line — does not impact!
+            logger.debug(
+                "Disruption %s (%s) ignored for journey stops %s (no matching words in text)", 
+                d.id, d.summary, list(journey_stop_names)
+            )
 
     return filtered
-
