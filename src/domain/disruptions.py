@@ -5,8 +5,7 @@ Core logic ported and cleaned from the original backend_app.py.
 import logging
 import re
 import unicodedata
-from datetime import datetime
-
+from datetime import datetime, timedelta, time
 from bs4 import BeautifulSoup
 from pydantic import BaseModel
 
@@ -133,6 +132,23 @@ def _navitia_dt_to_iso(navitia_dt: str) -> str:
         return s
 
 
+def _apply_date_adjustments(date_debut_iso: str, date_fin_iso: str) -> str:
+    """
+    If the end date is on a later day than start date and ends in the morning (before 12:00 PM),
+    shift it to 23:59:00 of the previous day so it doesn't overlap visually into the next day.
+    """
+    try:
+        dt_debut = datetime.fromisoformat(date_debut_iso)
+        dt_fin = datetime.fromisoformat(date_fin_iso)
+        if dt_fin.date() > dt_debut.date() and dt_fin.hour < 12:
+            prev_day_dt = datetime.combine(dt_fin.date() - timedelta(days=1), time(23, 59, 0))
+            if prev_day_dt >= dt_debut:
+                return prev_day_dt.isoformat()
+    except Exception:
+        pass
+    return date_fin_iso
+
+
 def _extract_message_by_channel(disruption: dict, channel_names: list[str]) -> str:
     messages = disruption.get("messages", [])
     for channel_name in channel_names:
@@ -233,6 +249,7 @@ def normalize_line_disruptions(raw: dict, line_info: LineInfo) -> list[Disruptio
             try:
                 date_debut = _navitia_dt_to_iso(begin)
                 date_fin = _navitia_dt_to_iso(end)
+                date_fin = _apply_date_adjustments(date_debut, date_fin)
                 datetime.fromisoformat(date_debut)
                 datetime.fromisoformat(date_fin)
                 parsed_periods.append(DisruptionPeriod(
@@ -305,6 +322,7 @@ def find_disruption_in_raw(
         try:
             date_debut = _navitia_dt_to_iso(begin)
             date_fin = _navitia_dt_to_iso(end)
+            date_fin = _apply_date_adjustments(date_debut, date_fin)
         except Exception:
             continue
 
@@ -358,6 +376,7 @@ def find_disruption_detail_with_all_periods(
             try:
                 date_debut = _navitia_dt_to_iso(begin)
                 date_fin = _navitia_dt_to_iso(end)
+                date_fin = _apply_date_adjustments(date_debut, date_fin)
                 datetime.fromisoformat(date_debut)
                 datetime.fromisoformat(date_fin)
                 parsed_periods.append(DisruptionPeriod(

@@ -105,35 +105,35 @@ LINE_REGISTRY: dict[str, LineInfo] = {
     # ── Transilien ─────────────────────────────────────────────────────────
     # TODO: verify navitia_ids for Transilien lines via API
     "H": LineInfo(
-        "C01570", "H", "Transilien H", "transilien", "6E6E00", "FFFFFF",
+        "C01737", "H", "Transilien H", "transilien", "6E6E00", "FFFFFF",
         f"{_WIKI_FULL}/8/84/Paris_transit_icons_-_Train_H.svg",
     ),
     "J": LineInfo(
-        "C01571", "J", "Transilien J", "transilien", "C9A71C", "FFFFFF",
+        "C01739", "J", "Transilien J", "transilien", "C9A71C", "FFFFFF",
         f"{_WIKI_FULL}/0/0b/Paris_transit_icons_-_Train_J.svg",
     ),
     "K": LineInfo(
-        "C01572", "K", "Transilien K", "transilien", "9F9825", "FFFFFF",
+        "C01738", "K", "Transilien K", "transilien", "9F9825", "FFFFFF",
         f"{_WIKI_FULL}/f/f3/Paris_transit_icons_-_Train_K.svg",
     ),
     "L": LineInfo(
-        "C01573", "L", "Transilien L", "transilien", "8DB7C8", "000000",
+        "C01740", "L", "Transilien L", "transilien", "8DB7C8", "000000",
         f"{_WIKI_FULL}/8/81/Paris_transit_icons_-_Train_L.svg",
     ),
     "N": LineInfo(
-        "C01574", "N", "Transilien N", "transilien", "004899", "FFFFFF",
+        "C01736", "N", "Transilien N", "transilien", "004899", "FFFFFF",
         f"{_WIKI_FULL}/4/43/Paris_transit_icons_-_Train_N.svg",
     ),
     "P": LineInfo(
-        "C01575", "P", "Transilien P", "transilien", "F0A500", "FFFFFF",
+        "C01841", "P", "Transilien P", "transilien", "F0A500", "FFFFFF",
         f"{_WIKI_FULL}/c/c7/Paris_transit_icons_-_Train_P.svg",
     ),
     "R": LineInfo(
-        "C01576", "R", "Transilien R", "transilien", "E87B10", "FFFFFF",
+        "C01731", "R", "Transilien R", "transilien", "E87B10", "FFFFFF",
         f"{_WIKI_FULL}/f/fb/Paris_transit_icons_-_Train_R.svg",
     ),
     "U": LineInfo(
-        "C01577", "U", "Transilien U", "transilien", "CE007C", "FFFFFF",
+        "C01741", "U", "Transilien U", "transilien", "CE007C", "FFFFFF",
         f"{_WIKI_FULL}/d/df/Paris_transit_icons_-_Train_U.svg",
     ),
 }
@@ -147,17 +147,3 @@ ALL_CODES = METRO_CODES + RER_CODES + TRANSILIEN_CODES
 
 def get_line(code: str) -> LineInfo | None:
     return LINE_REGISTRY.get(code)
-
-
-def get_line_by_navitia_id(navitia_id: str) -> LineInfo | None:
-    """Look up a LineInfo by its short navitia ID (e.g. 'C01374')."""
-    for info in LINE_REGISTRY.values():
-        if info.navitia_id == navitia_id:
-            return info
-    return None
-
-
-def navitia_full_id(code: str) -> str:
-    """Return the full Navitia line ID, e.g. 'line:IDFM:C01374'."""
-    info = LINE_REGISTRY[code]
-    return f"line:IDFM:{info.navitia_id}"
