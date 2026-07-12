@@ -1,12 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { DisruptionDetail, PlaceResult, JourneyItinerary, LineInfo } from "@/lib/types";
+import { useEffect, useRef, useState } from "react";
+import { DisruptionDetail, PlaceResult, JourneyItinerary, LineInfo, StationInfo, LineStationsData } from "@/lib/types";
 import { api } from "@/lib/api";
 import { causeLabel, effectLabel } from "@/lib/utils";
 import LineSelector from "@/components/LineSelector";
 import DisruptionCard from "@/components/DisruptionCard";
 import DisruptionCalendar from "@/components/DisruptionCalendar";
+import dynamic from "next/dynamic";
+
+const DisruptionMap = dynamic(() => import("@/components/DisruptionMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="state-message state-message--loading" style={{ height: "100%", minHeight: "400px" }}>
+      <div className="loader"></div>
+      <p>Chargement de la carte interactive...</p>
+    </div>
+  ),
+});
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("fr-FR", {
@@ -22,7 +33,7 @@ export default function Home() {
   const [selectedLines, setSelectedLines] = useState<string[]>(["1", "4", "A"]);
   const [lines, setLines] = useState<LineInfo[]>([]);
   const [disruptions, setDisruptions] = useState<DisruptionDetail[]>([]);
-  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [viewMode, setViewMode] = useState<"list" | "calendar" | "map">("list");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,6 +49,17 @@ export default function Home() {
   const [hidePastEvents, setHidePastEvents] = useState<boolean>(true);
   const [effectFilter, setEffectFilter] = useState<string>("ALL");
   const [onlyDirectImpacts, setOnlyDirectImpacts] = useState<boolean>(true);
+
+  // Stations state for map
+  const [stations, setStations] = useState<Record<string, LineStationsData>>({});
+  const [stationsLoading, setStationsLoading] = useState(false);
+
+  // Date Filters state
+  const [startDate, setStartDate] = useState<string>(() => {
+    const today = new Date();
+    return today.toISOString().split("T")[0];
+  });
+  const [endDate, setEndDate] = useState<string>("");
 
   // Modal event detail state
   const [activeDisruption, setActiveDisruption] = useState<DisruptionDetail | null>(null);
@@ -112,6 +134,44 @@ export default function Home() {
   const activeItinerary = itineraries[activeItineraryIndex] ?? null;
   const currentDisruptions = isJourneyMode ? journeyDisruptions : disruptions;
 
+  // Determine active line codes to fetch station coordinates
+  const activeLineCodes = isJourneyMode
+    ? activeItinerary
+      ? Array.from(
+          new Set(
+            activeItinerary.sections
+              .filter((s) => s.type === "public_transport" && s.line_code)
+              .map((s) => s.line_code as string)
+          )
+        )
+      : []
+    : selectedLines;
+
+  // Reactively fetch station coordinates whenever activeLineCodes changes
+  useEffect(() => {
+    if (activeLineCodes.length === 0) {
+      setStations({});
+      return;
+    }
+
+    let active = true;
+    setStationsLoading(true);
+    api.getLineStations(activeLineCodes)
+      .then((data) => {
+        if (active) setStations(data);
+      })
+      .catch((err) => {
+        console.error("Failed to load stations:", err);
+      })
+      .finally(() => {
+        if (active) setStationsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeLineCodes]);
+
   // Helper to check if a disruption impacts the currently active route itinerary
   const getDisruptionImpactsActiveRoute = (d: DisruptionDetail) => {
     if (!isJourneyMode || !activeItinerary) return true;
@@ -128,6 +188,19 @@ export default function Home() {
     if (hidePastEvents) {
       const now = new Date();
       if (new Date(d.date_fin) < now) {
+        return false;
+      }
+    }
+    // Date Range Filters (Overlaps check)
+    if (startDate) {
+      const filterStart = new Date(startDate + "T00:00:00");
+      if (new Date(d.date_fin) < filterStart) {
+        return false;
+      }
+    }
+    if (endDate) {
+      const filterEnd = new Date(endDate + "T23:59:59");
+      if (new Date(d.date_debut) > filterEnd) {
         return false;
       }
     }
@@ -228,6 +301,60 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Date Range Filter Panel */}
+          <div className="card panel">
+            <h2 className="panel__title">📅 Période des travaux</h2>
+            <p className="panel__desc">Filtrer les travaux planifiés sur une période spécifique.</p>
+            <div className="date-filter-form" style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "12px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "#94a3b8" }}>Date de début</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  style={{
+                    background: "rgba(15, 23, 42, 0.6)",
+                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                    borderRadius: "8px",
+                    color: "#f8fafc",
+                    padding: "8px 12px",
+                    fontSize: "0.9rem",
+                    outline: "none"
+                  }}
+                />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: "600", color: "#94a3b8" }}>Date de fin</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  style={{
+                    background: "rgba(15, 23, 42, 0.6)",
+                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                    borderRadius: "8px",
+                    color: "#f8fafc",
+                    padding: "8px 12px",
+                    fontSize: "0.9rem",
+                    outline: "none"
+                  }}
+                />
+              </div>
+              {(startDate || endDate) && (
+                <button
+                  className="btn btn--secondary"
+                  onClick={() => {
+                    setStartDate("");
+                    setEndDate("");
+                  }}
+                  style={{ marginTop: "4px", padding: "6px 12px", fontSize: "0.8rem", width: "100%" }}
+                >
+                  Réinitialiser les dates
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Line Selector */}
           <div className={`card panel ${isJourneyMode ? "panel--disabled" : ""}`}>
             {isJourneyMode && (
@@ -257,6 +384,13 @@ export default function Home() {
                 onClick={() => setViewMode("calendar")}
               >
                 📅 Calendrier
+              </button>
+              <button
+                id="view-map-tab"
+                className={`view-selector__btn ${viewMode === "map" ? "view-selector__btn--active" : ""}`}
+                onClick={() => setViewMode("map")}
+              >
+                🗺️ Carte
               </button>
             </div>
 
@@ -472,18 +606,25 @@ export default function Home() {
               </div>
             )}
 
-            {!loading && !error && filteredDisruptions.length === 0 && (
-              <div className="state-message state-message--empty">
-                <h3>🌿 Aucun travail détecté</h3>
-                <p>
-                  Toutes les lignes sélectionnées fonctionnent normalement ou n'ont pas de travaux signalés.
-                </p>
-              </div>
-            )}
-
-            {!loading && !error && filteredDisruptions.length > 0 && (
+            {!loading && !error && (
               <>
-                {viewMode === "list" ? (
+                {viewMode === "map" ? (
+                  <div className="card map-card" style={{ height: "650px", minHeight: "650px", position: "relative" }}>
+                    <DisruptionMap
+                      disruptions={filteredDisruptions}
+                      stations={stations}
+                      onDisruptionClick={handleCardClick}
+                      lines={lines}
+                    />
+                  </div>
+                ) : filteredDisruptions.length === 0 ? (
+                  <div className="state-message state-message--empty">
+                    <h3>🌿 Aucun travail détecté</h3>
+                    <p>
+                      Toutes les lignes sélectionnées fonctionnent normalement ou n'ont pas de travaux signalés.
+                    </p>
+                  </div>
+                ) : viewMode === "list" ? (
                   <div className="disruption-list">
                     {disruptionsToRender.map((d) => (
                       <div key={d.id} onClick={() => handleCardClick(d)} style={{ cursor: "pointer" }}>

@@ -41,7 +41,7 @@ from src.domain.lines import (
     get_line,
 )
 from src.services.ics_generator import build_google_calendar_url, build_ics_bytes, build_bulk_ics_bytes
-from src.services.navitia_client import fetch_line_reports, fetch_places, fetch_journeys
+from src.services.navitia_client import fetch_line_reports, fetch_places, fetch_journeys, fetch_line_stations
 
 
 # ── Bootstrap ──────────────────────────────────────────────────────────────────
@@ -189,6 +189,36 @@ def get_lines() -> list[dict]:
             "logo_url": info.logo_url,
         })
     return result
+
+
+@app.get("/lines/stations", summary="Fetch stations for selected lines")
+async def get_lines_stations(
+    lines: str = Query(..., description="Comma-separated line codes, e.g. '1,4,A'"),
+    client: httpx.AsyncClient = Depends(get_client),
+) -> dict[str, dict]:
+    """
+    Fetch the stations and ordered routes for each requested line.
+    Returns a dict mapping line code to dict with 'stations' and 'routes'.
+    """
+    codes = [c.strip() for c in lines.split(",") if c.strip()]
+    if not codes:
+        raise HTTPException(status_code=422, detail="No valid line codes provided")
+
+    unknown = [c for c in codes if c not in LINE_REGISTRY]
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Unknown line codes: {unknown}")
+
+    async def _fetch_one_stations(code: str) -> tuple[str, dict]:
+        line_info = LINE_REGISTRY[code]
+        try:
+            res = await fetch_line_stations(line_info.navitia_id, API_KEY, client=client)
+            return code, res
+        except Exception as exc:
+            logger.error("Failed to fetch stations for line %s: %s", code, exc)
+            return code, {"stations": [], "routes": []}
+
+    results = await asyncio.gather(*[_fetch_one_stations(c) for c in codes])
+    return {code: res for code, res in results}
 
 
 @app.get("/places", summary="Search for stop areas by name")

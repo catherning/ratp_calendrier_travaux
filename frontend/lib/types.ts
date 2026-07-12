@@ -64,3 +64,15 @@ export interface JourneyDisruptionResponse {
   itineraries: JourneyItinerary[];
   disruptions: DisruptionDetail[];
 }
+
+export interface StationInfo {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+}
+
+export interface LineStationsData {
+  stations: StationInfo[];
+  routes: StationInfo[][];
+}

@@ -1,4 +1,4 @@
-import { DisruptionDetail, LineInfo, PlaceResult, JourneyDisruptionResponse } from "./types";
+import { DisruptionDetail, LineInfo, PlaceResult, JourneyDisruptionResponse, StationInfo, LineStationsData } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -25,6 +25,10 @@ export const api = {
 
   getDisruptions(lineCodes: string[]): Promise<DisruptionDetail[]> {
     return apiFetch<DisruptionDetail[]>("/disruptions", { lines: lineCodes.join(",") });
+  },
+
+  getLineStations(lineCodes: string[]): Promise<Record<string, LineStationsData>> {
+    return apiFetch<Record<string, LineStationsData>>("/lines/stations", { lines: lineCodes.join(",") });
   },
 
   getJourneyDisruptions(fromId: string, toId: string): Promise<JourneyDisruptionResponse> {
