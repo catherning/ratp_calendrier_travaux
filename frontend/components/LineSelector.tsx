@@ -56,24 +56,31 @@ function LineGroup({
   title,
   lines,
   selected,
+  onChange,
   onToggle,
 }: {
   title: string;
   lines: LineInfo[];
   selected: string[];
+  onChange: (codes: string[]) => void;
   onToggle: (code: string) => void;
 }) {
   const allSelected = lines.length > 0 && lines.every((l) => selected.includes(l.code));
 
   const toggleAll = () => {
+    const groupCodes = lines.map((l) => l.code);
     if (allSelected) {
-      lines.forEach((l) => {
-        if (selected.includes(l.code)) onToggle(l.code);
-      });
+      // De-select all lines in this group
+      onChange(selected.filter((code) => !groupCodes.includes(code)));
     } else {
-      lines.forEach((l) => {
-        if (!selected.includes(l.code)) onToggle(l.code);
+      // Select all lines in this group
+      const newSelection = [...selected];
+      groupCodes.forEach((code) => {
+        if (!newSelection.includes(code)) {
+          newSelection.push(code);
+        }
       });
+      onChange(newSelection);
     }
   };
 
@@ -126,13 +133,13 @@ export default function LineSelector({ lines, selected, onChange }: Props) {
       </div>
 
       {metroLines.length > 0 && (
-        <LineGroup title="Métro" lines={metroLines} selected={selected} onToggle={toggle} />
+        <LineGroup title="Métro" lines={metroLines} selected={selected} onChange={onChange} onToggle={toggle} />
       )}
       {rerLines.length > 0 && (
-        <LineGroup title="RER" lines={rerLines} selected={selected} onToggle={toggle} />
+        <LineGroup title="RER" lines={rerLines} selected={selected} onChange={onChange} onToggle={toggle} />
       )}
       {transilienLines.length > 0 && (
-        <LineGroup title="Transilien" lines={transilienLines} selected={selected} onToggle={toggle} />
+        <LineGroup title="Transilien" lines={transilienLines} selected={selected} onChange={onChange} onToggle={toggle} />
       )}
     </section>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DisruptionDetail, PlaceResult, JourneyItinerary, LineInfo, StationInfo, LineStationsData } from "@/lib/types";
 import { api } from "@/lib/api";
 import { causeLabel, effectLabel } from "@/lib/utils";
@@ -47,7 +47,7 @@ export default function Home() {
 
   // Filters state
   const [hidePastEvents, setHidePastEvents] = useState<boolean>(true);
-  const [effectFilter, setEffectFilter] = useState<string>("ALL");
+  const [selectedEffects, setSelectedEffects] = useState<string[]>([]);
   const [onlyDirectImpacts, setOnlyDirectImpacts] = useState<boolean>(true);
 
   // Stations state for map
@@ -135,17 +135,19 @@ export default function Home() {
   const currentDisruptions = isJourneyMode ? journeyDisruptions : disruptions;
 
   // Determine active line codes to fetch station coordinates
-  const activeLineCodes = isJourneyMode
-    ? activeItinerary
-      ? Array.from(
-          new Set(
-            activeItinerary.sections
-              .filter((s) => s.type === "public_transport" && s.line_code)
-              .map((s) => s.line_code as string)
+  const activeLineCodes = useMemo(() => {
+    return isJourneyMode
+      ? activeItinerary
+        ? Array.from(
+            new Set(
+              activeItinerary.sections
+                .filter((s) => s.type === "public_transport" && s.line_code)
+                .map((s) => s.line_code as string)
+            )
           )
-        )
-      : []
-    : selectedLines;
+        : []
+      : selectedLines;
+  }, [isJourneyMode, activeItinerary, selectedLines]);
 
   // Reactively fetch station coordinates whenever activeLineCodes changes
   useEffect(() => {
@@ -183,6 +185,18 @@ export default function Home() {
     );
   };
 
+  // Helper to get total count of disruptions impacting a specific itinerary option
+  const getDisruptionCountForItinerary = (it: JourneyItinerary): number => {
+    const impactedIds = it.impacted_disruption_ids ?? [];
+    return journeyDisruptions.filter((d) => {
+      return (
+        impactedIds.includes(d.id) ||
+        impactedIds.includes(d.impact_id) ||
+        impactedIds.some((id) => id.startsWith(d.impact_id))
+      );
+    }).length;
+  };
+
   // Apply filters to currentDisruptions
   const filteredDisruptions = currentDisruptions.filter((d) => {
     if (hidePastEvents) {
@@ -204,7 +218,7 @@ export default function Home() {
         return false;
       }
     }
-    if (effectFilter !== "ALL" && d.effect !== effectFilter) {
+    if (selectedEffects.length > 0 && !selectedEffects.includes(d.effect)) {
       return false;
     }
     if (isJourneyMode && onlyDirectImpacts && !getDisruptionImpactsActiveRoute(d)) {
@@ -437,23 +451,44 @@ export default function Home() {
               </div>
             )}
 
-            <div className="filter-item">
-              <label htmlFor="effect-filter-select" className="filter-label">
+            <div className="filter-item filter-item--multi">
+              <label className="filter-label">
                 Filtrer par impact :
               </label>
-              <select
-                id="effect-filter-select"
-                className="filter-select"
-                value={effectFilter}
-                onChange={(e) => setEffectFilter(e.target.value)}
-              >
-                <option value="ALL">Tous les impacts</option>
-                <option value="NO_SERVICE">Trafic interrompu</option>
-                <option value="SIGNIFICANT_DELAYS">Retards importants</option>
-                <option value="REDUCED_SERVICE">Service réduit</option>
-                <option value="DETOUR">Déviation</option>
-                <option value="MODIFIED_SERVICE">Service modifié</option>
-              </select>
+              <div className="effect-toggle-group">
+                <button
+                  type="button"
+                  className={`effect-toggle-btn ${selectedEffects.length === 0 ? "effect-toggle-btn--active" : ""}`}
+                  onClick={() => setSelectedEffects([])}
+                >
+                  Tous
+                </button>
+                {[
+                  { value: "NO_SERVICE", label: "🚫 Interrompu" },
+                  { value: "SIGNIFICANT_DELAYS", label: "⚠️ Retards" },
+                  { value: "REDUCED_SERVICE", label: "📉 Service réduit" },
+                  { value: "DETOUR", label: "↪️ Déviation" },
+                  { value: "MODIFIED_SERVICE", label: "🔧 Modifié" },
+                ].map((eff) => {
+                  const isSelected = selectedEffects.includes(eff.value);
+                  return (
+                    <button
+                      key={eff.value}
+                      type="button"
+                      className={`effect-toggle-btn ${isSelected ? "effect-toggle-btn--active" : ""}`}
+                      onClick={() => {
+                        if (isSelected) {
+                          setSelectedEffects(selectedEffects.filter((x) => x !== eff.value));
+                        } else {
+                          setSelectedEffects([...selectedEffects, eff.value]);
+                        }
+                      }}
+                    >
+                      {eff.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -489,6 +524,8 @@ export default function Home() {
                       .filter(s => s.type === "public_transport" && s.line_code)
                       .map(s => s.line_code);
 
+                    const disruptionCount = getDisruptionCountForItinerary(it);
+
                     return (
                       <button
                         key={idx}
@@ -515,7 +552,7 @@ export default function Home() {
                         <div style={{ fontSize: "0.8rem", color: "#94a3b8", marginBottom: "8px" }}>
                           {depTime} - {arrTime}
                         </div>
-                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "8px" }}>
                           {linesUsed.map((lc, lIdx) => (
                             <span
                               key={lIdx}
@@ -532,6 +569,37 @@ export default function Home() {
                             </span>
                           ))}
                           {linesUsed.length === 0 && <span style={{ fontSize: "0.7rem", color: "#8a99ad" }}>🚶 Marche</span>}
+                        </div>
+                        <div style={{ marginTop: "6px" }}>
+                          {disruptionCount > 0 ? (
+                            <span style={{
+                              fontSize: "0.7rem",
+                              fontWeight: "700",
+                              color: "#f87171",
+                              background: "rgba(239, 68, 68, 0.15)",
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "3px"
+                            }}>
+                              ⚠️ {disruptionCount} {disruptionCount > 1 ? "travaux" : "travail"}
+                            </span>
+                          ) : (
+                            <span style={{
+                              fontSize: "0.7rem",
+                              fontWeight: "700",
+                              color: "#34d399",
+                              background: "rgba(16, 185, 129, 0.15)",
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "3px"
+                            }}>
+                              ✅ Aucun impact
+                            </span>
+                          )}
                         </div>
                       </button>
                     );
@@ -615,11 +683,12 @@ export default function Home() {
                       stations={stations}
                       onDisruptionClick={handleCardClick}
                       lines={lines}
+                      activeItinerary={isJourneyMode ? activeItinerary : null}
                     />
                   </div>
                 ) : filteredDisruptions.length === 0 ? (
                   <div className="state-message state-message--empty">
-                    <h3>🌿 Aucun travail détecté</h3>
+                    <h3>🌿 Pas de travaux détectés sur le trajet</h3>
                     <p>
                       Toutes les lignes sélectionnées fonctionnent normalement ou n'ont pas de travaux signalés.
                     </p>

@@ -159,25 +159,51 @@ async def fetch_line_stations(
     client: httpx.AsyncClient | None = None,
 ) -> dict:
     """
-    Fetch the stations and ordered routes for a line using route_schedules.
+    Fetch the stations and adjacent neighbor links for a line as a graph.
     navitia_id: short code like 'C01374'.
-    Returns a dict with 'stations' (unique flat list) and 'routes' (ordered routes).
+    Returns a dict with 'stations' mapping station ID to details (name, lat, lon, neighbors).
     """
     cached = _cache_get(_line_stations_cache, navitia_id)
     if cached is not None:
         logger.debug("Cache hit: line_stations for %s", navitia_id)
         return cached  # type: ignore[return-value]
 
+    # Try loading from the pre-populated local static track graph database first
+    import os
+    import json
+    try:
+        static_file = os.path.join(os.getcwd(), "data", "static_lines_graph.json")
+        if os.path.exists(static_file):
+            with open(static_file, "r", encoding="utf-8") as f:
+                static_db = json.load(f)
+            
+            from src.domain.lines import LINE_REGISTRY
+            line_code = None
+            for code, info in LINE_REGISTRY.items():
+                if info.navitia_id == navitia_id:
+                    line_code = code
+                    break
+            
+            if line_code and line_code in static_db:
+                logger.info("Serving static pre-populated tracks graph for Line %s (%s)", line_code, navitia_id)
+                res = static_db[line_code]
+                _cache_set(_line_stations_cache, navitia_id, res, LINE_STATIONS_TTL)
+                return res
+    except Exception as exc:
+        logger.error("Error loading static pre-populated tracks graph for %s: %s", navitia_id, exc)
+
+    from datetime import datetime, timezone
+    now_str = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+
     full_id = f"line:IDFM:{navitia_id}"
     url = f"{NAVITIA_BASE}/lines/{quote(full_id, safe='')}/route_schedules"
     params = {
-        "from_datetime": "20260713T080000",
+        "from_datetime": now_str,
         "items_per_schedule": "2"
     }
 
-    logger.info("Fetching line_stations (route_schedules) for %s", navitia_id)
-    routes = []
-    unique_stations_map = {}
+    logger.info("Fetching line_stations (route_schedules) as fallback graph for %s (time: %s)", navitia_id, now_str)
+    stations_db = {}
 
     try:
         resp = await _get_with_fallback(url, headers={"apikey": api_key}, params=params, timeout=12.0, client=client)
@@ -189,7 +215,7 @@ async def fetch_line_stations(
                 if not rows:
                     continue
 
-                route_path = []
+                path_ids = []
                 for row in rows:
                     sp = row.get("stop_point", {})
                     name = sp.get("name", "").split("(")[0].strip()
@@ -205,26 +231,26 @@ async def fetch_line_stations(
                     except ValueError:
                         continue
 
-                    station_info = {
-                        "id": stop_area_id,
-                        "name": name,
-                        "lat": lat,
-                        "lon": lon
-                    }
-                    route_path.append(station_info)
+                    if stop_area_id not in stations_db:
+                        stations_db[stop_area_id] = {
+                            "name": name,
+                            "lat": lat,
+                            "lon": lon,
+                            "neighbors": set()
+                        }
+                    path_ids.append(stop_area_id)
 
-                    # Deduplicate using station name for the unique flat stations list
-                    if name not in unique_stations_map:
-                        unique_stations_map[name] = station_info
-
-                if len(route_path) > 1:
-                    routes.append(route_path)
+                for i in range(len(path_ids) - 1):
+                    id_a = path_ids[i]
+                    id_b = path_ids[i+1]
+                    stations_db[id_a]["neighbors"].add(id_b)
+                    stations_db[id_b]["neighbors"].add(id_a)
     except Exception as e:
-        logger.error("Error fetching route_schedules for %s: %s", navitia_id, e)
+        logger.error("Error fallback fetching route_schedules for graph %s: %s", navitia_id, e)
 
     # Fallback to stop_points if no routes were parsed successfully
-    if not routes:
-        logger.warning("No route schedules found for %s, falling back to stop_points", navitia_id)
+    if not stations_db:
+        logger.warning("No route schedules found for graph %s, falling back to stop_points", navitia_id)
         url_fb = f"{NAVITIA_BASE}/lines/{quote(full_id, safe='')}/stop_points"
         try:
             resp_fb = await _get_with_fallback(url_fb, headers={"apikey": api_key}, timeout=12.0, client=client)
@@ -245,20 +271,28 @@ async def fetch_line_stations(
                     except ValueError:
                         continue
 
-                    station_info = {
-                        "id": stop_area_id,
-                        "name": name,
-                        "lat": lat,
-                        "lon": lon
-                    }
-                    if name not in unique_stations_map:
-                        unique_stations_map[name] = station_info
+                    if stop_area_id not in stations_db:
+                        stations_db[stop_area_id] = {
+                            "name": name,
+                            "lat": lat,
+                            "lon": lon,
+                            "neighbors": set()
+                        }
         except Exception as e:
-            logger.error("Error fallback fetching stop_points for %s: %s", navitia_id, e)
+            logger.error("Error fallback fetching stop_points for graph %s: %s", navitia_id, e)
+
+    # Convert neighbors set to serializable list
+    serializable_stations = {}
+    for st_id, info in stations_db.items():
+        serializable_stations[st_id] = {
+            "name": info["name"],
+            "lat": info["lat"],
+            "lon": info["lon"],
+            "neighbors": sorted(list(info["neighbors"])) if isinstance(info["neighbors"], (set, list)) else []
+        }
 
     result = {
-        "stations": list(unique_stations_map.values()),
-        "routes": routes
+        "stations": serializable_stations
     }
 
     _cache_set(_line_stations_cache, navitia_id, result, LINE_STATIONS_TTL)

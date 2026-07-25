@@ -72,7 +72,13 @@ export interface StationInfo {
   lon: number;
 }
 
+export interface GraphStationInfo {
+  name: string;
+  lat: number;
+  lon: number;
+  neighbors: string[];
+}
+
 export interface LineStationsData {
-  stations: StationInfo[];
-  routes: StationInfo[][];
+  stations: Record<string, GraphStationInfo>;
 }
