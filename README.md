@@ -148,8 +148,46 @@ Graphs are stored as **permanent JSON files**, with a schema version and an
 update timestamp. They do not expire after 30 days and are not deleted when
 the backend restarts. The public `GET /lines/stations?lines=1,4,A` only reads
 these files: **it never calls Navitia**, even when data is missing or old.
-Reads run outside the event loop, do not wait for an update to finish, and
-observe the latest file on the next request (including across backend workers).
+Reads run outside the event loop and do not wait for an update to finish.
+Local-only deployments observe the latest file on the next request (including
+across backend workers sharing that directory).
+
+### GCP deployment and bucket-backed graphs
+
+See [GCP deployment](deploy/README.md) for programmatic provisioning, GitHub
+Actions releases, billing and traffic alerts. Cloud Scheduler is not provisioned.
+
+Set `GCS_BUCKET_NAME` and optionally `GCS_BUCKET_PREFIX` to enable Cloud Storage.
+The existing SHA-256 JSON filenames and versioned envelopes are preserved.
+On a local cache miss (or invalid local file), the backend downloads the object,
+validates it, and atomically saves it under `LINE_GRAPH_DATA_DIR`. Subsequent
+reads use that local file without contacting GCS. Missing objects return HTTP
+503; permission, network and invalid-object failures are logged and surfaced.
+Visitor requests still never generate graphs through Navitia.
+
+On Cloud Run, set `LINE_GRAPH_DATA_DIR=/tmp/line_graphs`. This is an ephemeral,
+memory-backed per-instance cache, **not durable storage**. The bucket is durable.
+Cache revalidation is deliberately deferred: another instance's upload or an
+external bucket update is not visible until the cached file is removed or that
+instance restarts. There is no memory cache or background synchronization.
+
+Administrative writes validate and upload to the bucket **before** replacing
+the local file. Upload failure preserves the local file; a local write failure
+after a successful upload reports failure, but the bucket may already contain
+the new graph. Check logs before retrying. Use one updater: distributed locks
+and conditional concurrent writes are not implemented.
+
+Cloud Run uses its backend service account through Application Default
+Credentials; do not put credential files in the image. Local bucket access
+requires `gcloud auth application-default login`. With `GCS_BUCKET_NAME` unset,
+the existing local-only behavior remains.
+
+The deployed frontend uses `NEXT_PUBLIC_API_URL=/api` (build-time) and
+`BACKEND_API_URL` (server-only runtime). Its allowlisted GET proxy authenticates
+to the IAM-protected backend with a Google ID token and supports ICS downloads.
+It never forwards `/admin/*`, browser credentials, or arbitrary headers.
+For local proxy testing only, set `BACKEND_AUTH_MODE=none`; production uses OIDC.
+Existing Compose direct-browser API access remains unchanged.
 
 The default directory is `line_graphs/` at the repository root, resolved from
 the backend source location rather than the current working directory.
@@ -182,6 +220,11 @@ An empty key disables the endpoint (HTTP 503). Never put it in a
 `NEXT_PUBLIC_*` variable, a browser request, a public URL, or source control.
 The update endpoint expects this key in the `X-Admin-Key` header:
 
+On the IAM-protected Cloud Run backend, also supply an `Authorization: Bearer`
+Google ID token from an identity granted `roles/run.invoker` on that service.
+The admin key alone is not sufficient; the public frontend proxy deliberately
+cannot call this endpoint.
+
 ```sh
 curl --fail-with-body --max-time 1800 \
   -X POST 'https://YOUR_BACKEND/admin/lines/stations/refresh?lines=1,4,A' \
@@ -193,7 +236,8 @@ Use `POST /admin/lines/stations/refresh?lines=all` with the same administration
 header to regenerate every registered line **one at a time**. The public GET
 does not accept `all` and never starts generation.
 Updates are sequential within a batch to limit Navitia load. The request waits
-until each update is built, validated and **successfully written to disk**:
+until each update is built, validated and **successfully persisted** (bucket
+and local cache when bucket-backed):
 
 ```json
 {
@@ -204,8 +248,9 @@ until each update is built, validated and **successfully written to disk**:
 ```
 
 HTTP 200 means all requested files were updated. HTTP 502 reports at least one
-failure, with per-line `updated`/`failed` outcomes; successful files remain updated
-and failed lines keep their previous files. HTTP 409 reports an update already
+failure, with per-line `updated`/`failed` outcomes; successful files remain updated.
+In local-only mode failed lines keep their previous files; bucket mode has the
+partial-persistence caveat described above. HTTP 409 reports an update already
 running for a requested line in the same backend process. Use a single updater
 instance/process to avoid concurrent refreshes across replicas.
 Writes use a temporary file, flush and atomic replacement, so readers never
@@ -230,12 +275,9 @@ Keep the admin secret restricted to trusted operators/scheduler configuration;
 IAM/OIDC authentication can replace the shared secret in a later deployment.
 
 **Cloud Run's local container filesystem is ephemeral**, even if the path is
-called `data/`. Before using Cloud Scheduler with Cloud Run, mount a durable,
-shared data source (for example a Cloud Storage volume), configure
-`LINE_GRAPH_DATA_DIR` and verify its atomic-write semantics, or adapt this
-file store to Cloud Storage object writes. The Compose host directory is durable
-for the current deployment; the Cloud Run storage integration is not implemented
-by this change.
+called `data/`. Use the bucket-backed mode above for persistence. Before adding
+Scheduler, address cross-instance cache freshness and duplicate refreshes.
+The Compose host directory remains durable for local deployments.
 
 If the vehicle-journey collection omits `stop_times`, the builder requests that
 journey's detail before deciding whether it is usable. Definitions still empty

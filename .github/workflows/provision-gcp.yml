@@ -1,0 +1,62 @@
+name: Provision GCP (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Resources first; services after local secret/image seeding
+        type: choice
+        options: [resources, services]
+        default: resources
+        required: true
+      backend_image:
+        description: For services phase only, registry backend@sha256 digest
+        type: string
+      frontend_image:
+        description: For services phase only, registry frontend@sha256 digest
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ratp-production-deployment
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    if: github.ref == format('refs/heads/{0}', vars.DEPLOY_BRANCH)
+    environment: provisioning
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CONFIG: deploy/config.json
+      PHASE: ${{ inputs.phase }}
+      BACKEND_IMAGE: ${{ inputs.backend_image }}
+      FRONTEND_IMAGE: ${{ inputs.frontend_image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Materialize non-secret environment configuration
+        env:
+          DEPLOY_CONFIG_JSON: ${{ vars.DEPLOY_CONFIG_JSON }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$DEPLOY_CONFIG_JSON" > "$CONFIG"
+          python3 deploy/config.py "$CONFIG"
+          python3 deploy/config.py "$CONFIG" check-github
+      - id: config
+        name: Read validated configuration
+        run: |
+          set -euo pipefail
+          python3 deploy/config.py "$CONFIG" outputs >> "$GITHUB_OUTPUT"
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ steps.config.outputs.workload_identity_provider }}
+          service_account: ${{ steps.config.outputs.provision_service_account }}
+          project_id: ${{ steps.config.outputs.project_id }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Reconcile infrastructure (never Scheduler)
+        run: bash deploy/provision.sh "$CONFIG" "$PHASE" "$BACKEND_IMAGE" "$FRONTEND_IMAGE"

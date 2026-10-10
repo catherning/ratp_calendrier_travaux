@@ -1,0 +1,88 @@
+name: Release GCP
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ratp-production-deployment
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == format('refs/heads/{0}', vars.DEPLOY_BRANCH)
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CONFIG: deploy/config.json
+      COMMIT_SHA: ${{ github.sha }}
+      CARTO_API_KEY: ${{ vars.NEXT_PUBLIC_CARTO_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Materialize non-secret configuration
+        env:
+          DEPLOY_CONFIG_JSON: ${{ vars.DEPLOY_CONFIG_JSON }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$DEPLOY_CONFIG_JSON" > "$CONFIG"
+          python3 deploy/config.py "$CONFIG"
+          python3 deploy/config.py "$CONFIG" check-github
+          [[ -n "$CARTO_API_KEY" ]] || { echo "Set build-time NEXT_PUBLIC_CARTO_API_KEY"; exit 1; }
+      - id: config
+        run: |
+          set -euo pipefail
+          python3 deploy/config.py "$CONFIG" outputs >> "$GITHUB_OUTPUT"
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ steps.config.outputs.workload_identity_provider }}
+          service_account: ${{ steps.config.outputs.release_service_account }}
+          project_id: ${{ steps.config.outputs.project_id }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Authenticate registry
+        env:
+          REGION: ${{ steps.config.outputs.region }}
+        run: gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+      - id: images
+        name: Build immutable commit images, or reuse existing digests
+        env:
+          PROJECT: ${{ steps.config.outputs.project_id }}
+          REGION: ${{ steps.config.outputs.region }}
+          REPOSITORY: ${{ steps.config.outputs.artifact_repository }}
+        run: |
+          set -euo pipefail
+          registry="$REGION-docker.pkg.dev/$PROJECT/$REPOSITORY"
+          for component in backend frontend; do
+            image="$registry/$component"
+            # Successful list, rather than a failed describe, distinguishes absent tags.
+            digest="$(gcloud artifacts docker tags list "$image" \
+              --filter="tag=$image:$COMMIT_SHA" --format='value(version)')"
+            if [[ -z "$digest" ]]; then
+              if [[ "$component" == backend ]]; then
+                docker build --tag "$image:$COMMIT_SHA" .
+              else
+                docker build --tag "$image:$COMMIT_SHA" \
+                  --build-arg NEXT_PUBLIC_API_URL=/api \
+                  --build-arg NEXT_PUBLIC_CARTO_API_KEY="$CARTO_API_KEY" frontend
+              fi
+              docker push "$image:$COMMIT_SHA"
+              digest="$(gcloud artifacts docker images describe "$image:$COMMIT_SHA" \
+                --format='value(image_summary.digest)')"
+            else
+              digest="${digest##*/}"
+            fi
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "Missing/invalid image digest"; exit 1; }
+            echo "${component}_image=$image@$digest" >> "$GITHUB_OUTPUT"
+          done
+      - name: Deploy backend, test IAM, deploy frontend, test proxy
+        env:
+          BACKEND_IMAGE: ${{ steps.images.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ steps.images.outputs.frontend_image }}
+        run: bash deploy/release.sh "$CONFIG" "$BACKEND_IMAGE" "$FRONTEND_IMAGE"

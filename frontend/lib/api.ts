@@ -1,13 +1,11 @@
-import { DisruptionDetail, DisruptionStatistics, LineInfo, PlaceResult, JourneyDisruptionResponse, StationInfo, LineStationsData } from "./types";
+import { DisruptionDetail, DisruptionStatistics, LineInfo, PlaceResult, JourneyDisruptionResponse, LineStationsData } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function apiFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
-  const url = new URL(`${API_BASE}${path}`);
-  if (params) {
-    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  }
-  const res = await fetch(url.toString(), { next: { revalidate: 60 } });
+  const query = new URLSearchParams(params).toString();
+  const url = `${API_BASE}${path}${query ? `?${query}` : ""}`;
+  const res = await fetch(url, { next: { revalidate: 60 } });
   if (!res.ok) {
     throw new Error(`API ${path} returned ${res.status}`);
   }

@@ -107,6 +107,7 @@ def test_skipped_stops_are_retained_in_reference_path():
 
 @pytest.fixture
 def isolated_cache(tmp_path, monkeypatch):
+    monkeypatch.setenv("GCS_BUCKET_NAME", "")
     monkeypatch.delenv("LINE_GRAPH_DATA_DIR", raising=False)
     monkeypatch.delenv("LINE_GRAPH_CACHE_DIR", raising=False)
     monkeypatch.setattr(line_graph_cache, "GRAPH_CACHE_DIR", tmp_path)

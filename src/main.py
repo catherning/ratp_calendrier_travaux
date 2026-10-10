@@ -320,7 +320,7 @@ async def update_lines_stations(
             logger.error("Station graph update failed for line %s: %s", code, exc)
             results[code] = {
                 "status": "failed",
-                "detail": "Update failed; any previously persisted graph is unchanged",
+                "detail": "Update failed; check backend logs before retrying",
             }
     statuses = {result["status"] for result in results.values()}
     status_code = 502 if "failed" in statuses else 409 if "busy" in statuses else 200
