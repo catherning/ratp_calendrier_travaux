@@ -1,0 +1,75 @@
+name: Configure Cloud Scheduler
+
+on:
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - "station_filtering"
+  #   paths:
+  #     - "deploy/gcp/backend-scheduler.config.json"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: configure-cloud-scheduler
+  cancel-in-progress: false
+
+jobs:
+  configure-cloud-scheduler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DEPLOY_CONFIG_PATH: deploy/gcp/backend-scheduler.config.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - id: config
+        name: Load deploy config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          [[ -f "${DEPLOY_CONFIG_PATH}" ]] || { echo "Missing deploy config: ${DEPLOY_CONFIG_PATH}"; exit 1; }
+
+          python3 - "${DEPLOY_CONFIG_PATH}" >> "$GITHUB_OUTPUT" <<'PY'
+          import json
+          import sys
+
+          config_path = sys.argv[1]
+          with open(config_path, "r", encoding="utf-8") as handle:
+              config = json.load(handle)
+
+          outputs = {
+              "project_id": config["projectId"],
+              "region": config["region"],
+              "workload_identity_provider": config["githubActions"]["workloadIdentityProvider"],
+              "deployer_service_account": config["githubActions"]["deployerServiceAccount"],
+              "scheduler_name": config["cloudScheduler"]["name"],
+          }
+
+          for key, value in outputs.items():
+              print(f"{key}={value}")
+          PY
+
+      - id: auth
+        name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ steps.config.outputs.workload_identity_provider }}
+          service_account: ${{ steps.config.outputs.deployer_service_account }}
+          project_id: ${{ steps.config.outputs.project_id }}
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ steps.config.outputs.project_id }}
+
+      - name: Configure Cloud Scheduler
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/configure_cloud_scheduler.sh "${DEPLOY_CONFIG_PATH}"

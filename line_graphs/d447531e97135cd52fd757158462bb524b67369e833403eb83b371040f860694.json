@@ -1,0 +1,268 @@
+{
+    "version": 1,
+    "navitia_id": "C01374",
+    "fetched_at": 1791647898.1299286,
+    "graph": {
+        "stations": {
+            "stop_area:IDFM:478883": {
+                "name": "Porte de Clignancourt",
+                "lat": 48.898183,
+                "lon": 2.345162,
+                "neighbors": [
+                    "stop_area:IDFM:71556"
+                ]
+            },
+            "stop_area:IDFM:479068": {
+                "name": "Étienne Marcel",
+                "lat": 48.86365,
+                "lon": 2.349945,
+                "neighbors": [
+                    "stop_area:IDFM:73636",
+                    "stop_area:IDFM:73794"
+                ]
+            },
+            "stop_area:IDFM:483315": {
+                "name": "Bagneux - Lucie Aubrac",
+                "lat": 48.803549,
+                "lon": 2.317649,
+                "neighbors": [
+                    "stop_area:IDFM:70441"
+                ]
+            },
+            "stop_area:IDFM:70441": {
+                "name": "Barbara",
+                "lat": 48.809751,
+                "lon": 2.317643,
+                "neighbors": [
+                    "stop_area:IDFM:483315",
+                    "stop_area:IDFM:70586"
+                ]
+            },
+            "stop_area:IDFM:70586": {
+                "name": "Mairie de Montrouge",
+                "lat": 48.818618,
+                "lon": 2.320789,
+                "neighbors": [
+                    "stop_area:IDFM:70441",
+                    "stop_area:IDFM:70657"
+                ]
+            },
+            "stop_area:IDFM:70657": {
+                "name": "Porte d'Orléans",
+                "lat": 48.822418,
+                "lon": 2.325567,
+                "neighbors": [
+                    "stop_area:IDFM:70586",
+                    "stop_area:IDFM:71030"
+                ]
+            },
+            "stop_area:IDFM:71030": {
+                "name": "Alésia",
+                "lat": 48.828209,
+                "lon": 2.326848,
+                "neighbors": [
+                    "stop_area:IDFM:70657",
+                    "stop_area:IDFM:73653"
+                ]
+            },
+            "stop_area:IDFM:71056": {
+                "name": "Denfert-Rochereau",
+                "lat": 48.833953,
+                "lon": 2.332768,
+                "neighbors": [
+                    "stop_area:IDFM:71088",
+                    "stop_area:IDFM:73653"
+                ]
+            },
+            "stop_area:IDFM:71088": {
+                "name": "Raspail",
+                "lat": 48.838784,
+                "lon": 2.330649,
+                "neighbors": [
+                    "stop_area:IDFM:71056",
+                    "stop_area:IDFM:71117"
+                ]
+            },
+            "stop_area:IDFM:71117": {
+                "name": "Vavin",
+                "lat": 48.841888,
+                "lon": 2.32926,
+                "neighbors": [
+                    "stop_area:IDFM:71088",
+                    "stop_area:IDFM:71139"
+                ]
+            },
+            "stop_area:IDFM:71139": {
+                "name": "Gare Montparnasse",
+                "lat": 48.840672,
+                "lon": 2.319343,
+                "neighbors": [
+                    "stop_area:IDFM:71117",
+                    "stop_area:IDFM:71184"
+                ]
+            },
+            "stop_area:IDFM:71184": {
+                "name": "Saint-Placide",
+                "lat": 48.846734,
+                "lon": 2.326636,
+                "neighbors": [
+                    "stop_area:IDFM:71139",
+                    "stop_area:IDFM:71202"
+                ]
+            },
+            "stop_area:IDFM:71202": {
+                "name": "Saint-Sulpice",
+                "lat": 48.851486,
+                "lon": 2.331985,
+                "neighbors": [
+                    "stop_area:IDFM:71184",
+                    "stop_area:IDFM:71216"
+                ]
+            },
+            "stop_area:IDFM:71216": {
+                "name": "Saint-Germain-des-Prés",
+                "lat": 48.853477,
+                "lon": 2.333424,
+                "neighbors": [
+                    "stop_area:IDFM:71202",
+                    "stop_area:IDFM:73618"
+                ]
+            },
+            "stop_area:IDFM:71223": {
+                "name": "Cité",
+                "lat": 48.855333,
+                "lon": 2.346948,
+                "neighbors": [
+                    "stop_area:IDFM:71264",
+                    "stop_area:IDFM:73620"
+                ]
+            },
+            "stop_area:IDFM:71264": {
+                "name": "Châtelet",
+                "lat": 48.858354,
+                "lon": 2.348491,
+                "neighbors": [
+                    "stop_area:IDFM:71223",
+                    "stop_area:IDFM:73794"
+                ]
+            },
+            "stop_area:IDFM:71333": {
+                "name": "Château d'Eau",
+                "lat": 48.872292,
+                "lon": 2.356572,
+                "neighbors": [
+                    "stop_area:IDFM:71359",
+                    "stop_area:IDFM:73633"
+                ]
+            },
+            "stop_area:IDFM:71359": {
+                "name": "Gare de l'Est",
+                "lat": 48.877209,
+                "lon": 2.358645,
+                "neighbors": [
+                    "stop_area:IDFM:71333",
+                    "stop_area:IDFM:71410"
+                ]
+            },
+            "stop_area:IDFM:71410": {
+                "name": "Gare du Nord",
+                "lat": 48.880957,
+                "lon": 2.355687,
+                "neighbors": [
+                    "stop_area:IDFM:71359",
+                    "stop_area:IDFM:71426"
+                ]
+            },
+            "stop_area:IDFM:71426": {
+                "name": "Barbès - Rochechouart",
+                "lat": 48.883789,
+                "lon": 2.349755,
+                "neighbors": [
+                    "stop_area:IDFM:71410",
+                    "stop_area:IDFM:71469"
+                ]
+            },
+            "stop_area:IDFM:71469": {
+                "name": "Château Rouge",
+                "lat": 48.887422,
+                "lon": 2.34958,
+                "neighbors": [
+                    "stop_area:IDFM:71426",
+                    "stop_area:IDFM:71511"
+                ]
+            },
+            "stop_area:IDFM:71511": {
+                "name": "Marcadet - Poissonniers",
+                "lat": 48.891383,
+                "lon": 2.350274,
+                "neighbors": [
+                    "stop_area:IDFM:71469",
+                    "stop_area:IDFM:71556"
+                ]
+            },
+            "stop_area:IDFM:71556": {
+                "name": "Simplon",
+                "lat": 48.895033,
+                "lon": 2.346811,
+                "neighbors": [
+                    "stop_area:IDFM:478883",
+                    "stop_area:IDFM:71511"
+                ]
+            },
+            "stop_area:IDFM:73618": {
+                "name": "Odéon",
+                "lat": 48.85214,
+                "lon": 2.339649,
+                "neighbors": [
+                    "stop_area:IDFM:71216",
+                    "stop_area:IDFM:73620"
+                ]
+            },
+            "stop_area:IDFM:73620": {
+                "name": "Saint-Michel Notre-Dame",
+                "lat": 48.853236,
+                "lon": 2.344255,
+                "neighbors": [
+                    "stop_area:IDFM:71223",
+                    "stop_area:IDFM:73618"
+                ]
+            },
+            "stop_area:IDFM:73633": {
+                "name": "Strasbourg - Saint-Denis",
+                "lat": 48.869242,
+                "lon": 2.353017,
+                "neighbors": [
+                    "stop_area:IDFM:71333",
+                    "stop_area:IDFM:73636"
+                ]
+            },
+            "stop_area:IDFM:73636": {
+                "name": "Réaumur - Sébastopol",
+                "lat": 48.866093,
+                "lon": 2.351857,
+                "neighbors": [
+                    "stop_area:IDFM:479068",
+                    "stop_area:IDFM:73633"
+                ]
+            },
+            "stop_area:IDFM:73653": {
+                "name": "Mouton-Duvernet",
+                "lat": 48.831157,
+                "lon": 2.329773,
+                "neighbors": [
+                    "stop_area:IDFM:71030",
+                    "stop_area:IDFM:71056"
+                ]
+            },
+            "stop_area:IDFM:73794": {
+                "name": "Les Halles",
+                "lat": 48.862729,
+                "lon": 2.345928,
+                "neighbors": [
+                    "stop_area:IDFM:479068",
+                    "stop_area:IDFM:71264"
+                ]
+            }
+        }
+    }
+}

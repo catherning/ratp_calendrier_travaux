@@ -1,0 +1,421 @@
+{
+    "version": 1,
+    "navitia_id": "C01742",
+    "fetched_at": 1791648518.8855813,
+    "graph": {
+        "stations": {
+            "stop_area:IDFM:412697": {
+                "name": "Noisy-le-Grand - Mont d'Est",
+                "lat": 48.841183,
+                "lon": 2.550351,
+                "neighbors": [
+                    "stop_area:IDFM:73163",
+                    "stop_area:IDFM:73166"
+                ]
+            },
+            "stop_area:IDFM:474151": {
+                "name": "Châtelet - Les Halles",
+                "lat": 48.861745,
+                "lon": 2.346977,
+                "neighbors": [
+                    "stop_area:IDFM:478926",
+                    "stop_area:IDFM:73626"
+                ]
+            },
+            "stop_area:IDFM:478926": {
+                "name": "Auber",
+                "lat": 48.872864,
+                "lon": 2.329727,
+                "neighbors": [
+                    "stop_area:IDFM:474151",
+                    "stop_area:IDFM:71347"
+                ]
+            },
+            "stop_area:IDFM:64483": {
+                "name": "Chatou - Croissy",
+                "lat": 48.885053,
+                "lon": 2.155263,
+                "neighbors": [
+                    "stop_area:IDFM:64514",
+                    "stop_area:IDFM:70902"
+                ]
+            },
+            "stop_area:IDFM:64514": {
+                "name": "Le Vésinet - Centre",
+                "lat": 48.889964,
+                "lon": 2.134569,
+                "neighbors": [
+                    "stop_area:IDFM:64483",
+                    "stop_area:IDFM:64582"
+                ]
+            },
+            "stop_area:IDFM:64582": {
+                "name": "Le Vésinet - Le Pecq",
+                "lat": 48.897625,
+                "lon": 2.121435,
+                "neighbors": [
+                    "stop_area:IDFM:64514",
+                    "stop_area:IDFM:64589"
+                ]
+            },
+            "stop_area:IDFM:64589": {
+                "name": "Saint-Germain-en-Laye",
+                "lat": 48.899273,
+                "lon": 2.095183,
+                "neighbors": [
+                    "stop_area:IDFM:64582"
+                ]
+            },
+            "stop_area:IDFM:64741": {
+                "name": "Houilles - Carrières-sur-Seine",
+                "lat": 48.919733,
+                "lon": 2.185356,
+                "neighbors": [
+                    "stop_area:IDFM:64918",
+                    "stop_area:IDFM:70945"
+                ]
+            },
+            "stop_area:IDFM:64883": {
+                "name": "Poissy",
+                "lat": 48.932925,
+                "lon": 2.040647,
+                "neighbors": [
+                    "stop_area:IDFM:65190"
+                ]
+            },
+            "stop_area:IDFM:64918": {
+                "name": "Sartrouville",
+                "lat": 48.937593,
+                "lon": 2.158034,
+                "neighbors": [
+                    "stop_area:IDFM:64741",
+                    "stop_area:IDFM:65048"
+                ]
+            },
+            "stop_area:IDFM:65048": {
+                "name": "Maisons-Laffitte",
+                "lat": 48.945738,
+                "lon": 2.144324,
+                "neighbors": [
+                    "stop_area:IDFM:64918",
+                    "stop_area:IDFM:65190",
+                    "stop_area:IDFM:73604"
+                ]
+            },
+            "stop_area:IDFM:65190": {
+                "name": "Achères Grand Cormier",
+                "lat": 48.955301,
+                "lon": 2.092856,
+                "neighbors": [
+                    "stop_area:IDFM:64883",
+                    "stop_area:IDFM:65048"
+                ]
+            },
+            "stop_area:IDFM:66436": {
+                "name": "Neuville - Université",
+                "lat": 49.014416,
+                "lon": 2.079335,
+                "neighbors": [
+                    "stop_area:IDFM:66696",
+                    "stop_area:IDFM:73605"
+                ]
+            },
+            "stop_area:IDFM:66696": {
+                "name": "Cergy Préfecture",
+                "lat": 49.03599,
+                "lon": 2.080128,
+                "neighbors": [
+                    "stop_area:IDFM:66436",
+                    "stop_area:IDFM:66858"
+                ]
+            },
+            "stop_area:IDFM:66834": {
+                "name": "Cergy le Haut",
+                "lat": 49.047777,
+                "lon": 2.010883,
+                "neighbors": [
+                    "stop_area:IDFM:66858"
+                ]
+            },
+            "stop_area:IDFM:66858": {
+                "name": "Cergy Saint-Christophe",
+                "lat": 49.04983,
+                "lon": 2.034368,
+                "neighbors": [
+                    "stop_area:IDFM:66696",
+                    "stop_area:IDFM:66834"
+                ]
+            },
+            "stop_area:IDFM:68105": {
+                "name": "Bussy-Saint-Georges",
+                "lat": 48.836512,
+                "lon": 2.710627,
+                "neighbors": [
+                    "stop_area:IDFM:68129",
+                    "stop_area:IDFM:68266"
+                ]
+            },
+            "stop_area:IDFM:68123": {
+                "name": "Lognes",
+                "lat": 48.839182,
+                "lon": 2.63328,
+                "neighbors": [
+                    "stop_area:IDFM:68129",
+                    "stop_area:IDFM:68153"
+                ]
+            },
+            "stop_area:IDFM:68129": {
+                "name": "Torcy",
+                "lat": 48.839044,
+                "lon": 2.65493,
+                "neighbors": [
+                    "stop_area:IDFM:68105",
+                    "stop_area:IDFM:68123"
+                ]
+            },
+            "stop_area:IDFM:68153": {
+                "name": "Noisiel",
+                "lat": 48.843634,
+                "lon": 2.616087,
+                "neighbors": [
+                    "stop_area:IDFM:68123",
+                    "stop_area:IDFM:73163"
+                ]
+            },
+            "stop_area:IDFM:68266": {
+                "name": "Val d'Europe",
+                "lat": 48.855024,
+                "lon": 2.773169,
+                "neighbors": [
+                    "stop_area:IDFM:68105",
+                    "stop_area:IDFM:68385"
+                ]
+            },
+            "stop_area:IDFM:68385": {
+                "name": "Marne-la-Vallée - Chessy",
+                "lat": 48.868565,
+                "lon": 2.78334,
+                "neighbors": [
+                    "stop_area:IDFM:68266"
+                ]
+            },
+            "stop_area:IDFM:70359": {
+                "name": "Le Parc de Saint-Maur",
+                "lat": 48.804787,
+                "lon": 2.486025,
+                "neighbors": [
+                    "stop_area:IDFM:70393",
+                    "stop_area:IDFM:73042"
+                ]
+            },
+            "stop_area:IDFM:70393": {
+                "name": "Saint-Maur - Créteil",
+                "lat": 48.806522,
+                "lon": 2.472228,
+                "neighbors": [
+                    "stop_area:IDFM:70359",
+                    "stop_area:IDFM:70640"
+                ]
+            },
+            "stop_area:IDFM:70640": {
+                "name": "Joinville-le-Pont",
+                "lat": 48.820506,
+                "lon": 2.463847,
+                "neighbors": [
+                    "stop_area:IDFM:70393",
+                    "stop_area:IDFM:71590"
+                ]
+            },
+            "stop_area:IDFM:70902": {
+                "name": "Rueil-Malmaison",
+                "lat": 48.887259,
+                "lon": 2.171722,
+                "neighbors": [
+                    "stop_area:IDFM:64483",
+                    "stop_area:IDFM:70940"
+                ]
+            },
+            "stop_area:IDFM:70940": {
+                "name": "Nanterre - Ville",
+                "lat": 48.89563,
+                "lon": 2.194599,
+                "neighbors": [
+                    "stop_area:IDFM:70902",
+                    "stop_area:IDFM:70956"
+                ]
+            },
+            "stop_area:IDFM:70945": {
+                "name": "Nanterre - Préfecture",
+                "lat": 48.896113,
+                "lon": 2.221967,
+                "neighbors": [
+                    "stop_area:IDFM:64741",
+                    "stop_area:IDFM:70956",
+                    "stop_area:IDFM:71517"
+                ]
+            },
+            "stop_area:IDFM:70956": {
+                "name": "Nanterre Université",
+                "lat": 48.900785,
+                "lon": 2.213712,
+                "neighbors": [
+                    "stop_area:IDFM:70940",
+                    "stop_area:IDFM:70945"
+                ]
+            },
+            "stop_area:IDFM:71347": {
+                "name": "Charles de Gaulle - Étoile",
+                "lat": 48.873545,
+                "lon": 2.295586,
+                "neighbors": [
+                    "stop_area:IDFM:478926",
+                    "stop_area:IDFM:71517"
+                ]
+            },
+            "stop_area:IDFM:71517": {
+                "name": "La Défense",
+                "lat": 48.891612,
+                "lon": 2.239601,
+                "neighbors": [
+                    "stop_area:IDFM:70945",
+                    "stop_area:IDFM:71347"
+                ]
+            },
+            "stop_area:IDFM:71590": {
+                "name": "Nogent-sur-Marne",
+                "lat": 48.83513,
+                "lon": 2.472157,
+                "neighbors": [
+                    "stop_area:IDFM:70640",
+                    "stop_area:IDFM:71630"
+                ]
+            },
+            "stop_area:IDFM:71630": {
+                "name": "Fontenay-sous-Bois",
+                "lat": 48.843634,
+                "lon": 2.464011,
+                "neighbors": [
+                    "stop_area:IDFM:71590",
+                    "stop_area:IDFM:71651"
+                ]
+            },
+            "stop_area:IDFM:71651": {
+                "name": "Vincennes",
+                "lat": 48.847492,
+                "lon": 2.434783,
+                "neighbors": [
+                    "stop_area:IDFM:71630",
+                    "stop_area:IDFM:71673",
+                    "stop_area:IDFM:71718"
+                ]
+            },
+            "stop_area:IDFM:71673": {
+                "name": "Nation",
+                "lat": 48.848838,
+                "lon": 2.396333,
+                "neighbors": [
+                    "stop_area:IDFM:71651",
+                    "stop_area:IDFM:73626"
+                ]
+            },
+            "stop_area:IDFM:71718": {
+                "name": "Val de Fontenay",
+                "lat": 48.853391,
+                "lon": 2.487569,
+                "neighbors": [
+                    "stop_area:IDFM:71651",
+                    "stop_area:IDFM:73190"
+                ]
+            },
+            "stop_area:IDFM:72881": {
+                "name": "Boissy-Saint-Léger",
+                "lat": 48.753047,
+                "lon": 2.505571,
+                "neighbors": [
+                    "stop_area:IDFM:72929"
+                ]
+            },
+            "stop_area:IDFM:72929": {
+                "name": "Sucy - Bonneuil",
+                "lat": 48.771609,
+                "lon": 2.507327,
+                "neighbors": [
+                    "stop_area:IDFM:72881",
+                    "stop_area:IDFM:72998"
+                ]
+            },
+            "stop_area:IDFM:72998": {
+                "name": "La Varenne - Chennevières",
+                "lat": 48.794731,
+                "lon": 2.513558,
+                "neighbors": [
+                    "stop_area:IDFM:72929",
+                    "stop_area:IDFM:73042"
+                ]
+            },
+            "stop_area:IDFM:73042": {
+                "name": "Champigny",
+                "lat": 48.80709,
+                "lon": 2.510913,
+                "neighbors": [
+                    "stop_area:IDFM:70359",
+                    "stop_area:IDFM:72998"
+                ]
+            },
+            "stop_area:IDFM:73163": {
+                "name": "Noisy - Champs",
+                "lat": 48.842965,
+                "lon": 2.5816,
+                "neighbors": [
+                    "stop_area:IDFM:412697",
+                    "stop_area:IDFM:68153"
+                ]
+            },
+            "stop_area:IDFM:73166": {
+                "name": "Bry-sur-Marne",
+                "lat": 48.844498,
+                "lon": 2.525953,
+                "neighbors": [
+                    "stop_area:IDFM:412697",
+                    "stop_area:IDFM:73190"
+                ]
+            },
+            "stop_area:IDFM:73190": {
+                "name": "Neuilly-Plaisance",
+                "lat": 48.853161,
+                "lon": 2.514085,
+                "neighbors": [
+                    "stop_area:IDFM:71718",
+                    "stop_area:IDFM:73166"
+                ]
+            },
+            "stop_area:IDFM:73604": {
+                "name": "Achères Ville",
+                "lat": 48.970063,
+                "lon": 2.076938,
+                "neighbors": [
+                    "stop_area:IDFM:65048",
+                    "stop_area:IDFM:73605"
+                ]
+            },
+            "stop_area:IDFM:73605": {
+                "name": "Conflans Fin d'Oise",
+                "lat": 48.990208,
+                "lon": 2.074667,
+                "neighbors": [
+                    "stop_area:IDFM:66436",
+                    "stop_area:IDFM:73604"
+                ]
+            },
+            "stop_area:IDFM:73626": {
+                "name": "Gare de Lyon",
+                "lat": 48.844569,
+                "lon": 2.375146,
+                "neighbors": [
+                    "stop_area:IDFM:474151",
+                    "stop_area:IDFM:71673"
+                ]
+            }
+        }
+    }
+}

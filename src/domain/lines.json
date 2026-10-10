@@ -1,0 +1,245 @@
+[
+  {
+    "navitia_id": "C01371",
+    "code": "1",
+    "name": "Métro 1",
+    "mode": "metro",
+    "color": "FFCE00",
+    "text_color": "000000",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Paris_transit_icons_-_M%C3%A9tro_1.svg/120px-Paris_transit_icons_-_M%C3%A9tro_1.svg.png"
+  },
+  {
+    "navitia_id": "C01372",
+    "code": "2",
+    "name": "Métro 2",
+    "mode": "metro",
+    "color": "0064B0",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/da/Paris_transit_icons_-_M%C3%A9tro_2.svg/120px-Paris_transit_icons_-_M%C3%A9tro_2.svg.png"
+  },
+  {
+    "navitia_id": "C01373",
+    "code": "3",
+    "name": "Métro 3",
+    "mode": "metro",
+    "color": "9F9825",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/01/Paris_transit_icons_-_M%C3%A9tro_3.svg/120px-Paris_transit_icons_-_M%C3%A9tro_3.svg.png"
+  },
+  {
+    "navitia_id": "C01374",
+    "code": "4",
+    "name": "Métro 4",
+    "mode": "metro",
+    "color": "C04191",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/76/Paris_transit_icons_-_M%C3%A9tro_4.svg/120px-Paris_transit_icons_-_M%C3%A9tro_4.svg.png"
+  },
+  {
+    "navitia_id": "C01375",
+    "code": "5",
+    "name": "Métro 5",
+    "mode": "metro",
+    "color": "F28E42",
+    "text_color": "000000",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/54/Paris_transit_icons_-_M%C3%A9tro_5.svg/120px-Paris_transit_icons_-_M%C3%A9tro_5.svg.png"
+  },
+  {
+    "navitia_id": "C01376",
+    "code": "6",
+    "name": "Métro 6",
+    "mode": "metro",
+    "color": "83C491",
+    "text_color": "000000",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Paris_transit_icons_-_M%C3%A9tro_6.svg/120px-Paris_transit_icons_-_M%C3%A9tro_6.svg.png"
+  },
+  {
+    "navitia_id": "C01377",
+    "code": "7",
+    "name": "Métro 7",
+    "mode": "metro",
+    "color": "F3A4BA",
+    "text_color": "000000",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Paris_transit_icons_-_M%C3%A9tro_7.svg/120px-Paris_transit_icons_-_M%C3%A9tro_7.svg.png"
+  },
+  {
+    "navitia_id": "C01378",
+    "code": "8",
+    "name": "Métro 8",
+    "mode": "metro",
+    "color": "CEADD2",
+    "text_color": "000000",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Paris_transit_icons_-_M%C3%A9tro_8.svg/120px-Paris_transit_icons_-_M%C3%A9tro_8.svg.png"
+  },
+  {
+    "navitia_id": "C01379",
+    "code": "9",
+    "name": "Métro 9",
+    "mode": "metro",
+    "color": "D5C900",
+    "text_color": "000000",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Paris_transit_icons_-_M%C3%A9tro_9.svg/120px-Paris_transit_icons_-_M%C3%A9tro_9.svg.png"
+  },
+  {
+    "navitia_id": "C01380",
+    "code": "10",
+    "name": "Métro 10",
+    "mode": "metro",
+    "color": "E3B32A",
+    "text_color": "000000",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/Paris_transit_icons_-_M%C3%A9tro_10.svg/120px-Paris_transit_icons_-_M%C3%A9tro_10.svg.png"
+  },
+  {
+    "navitia_id": "C01381",
+    "code": "11",
+    "name": "Métro 11",
+    "mode": "metro",
+    "color": "8D5E2A",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Paris_transit_icons_-_M%C3%A9tro_11.svg/120px-Paris_transit_icons_-_M%C3%A9tro_11.svg.png"
+  },
+  {
+    "navitia_id": "C01382",
+    "code": "12",
+    "name": "Métro 12",
+    "mode": "metro",
+    "color": "00814F",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Paris_transit_icons_-_M%C3%A9tro_12.svg/120px-Paris_transit_icons_-_M%C3%A9tro_12.svg.png"
+  },
+  {
+    "navitia_id": "C01383",
+    "code": "13",
+    "name": "Métro 13",
+    "mode": "metro",
+    "color": "98D4E2",
+    "text_color": "000000",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Paris_transit_icons_-_M%C3%A9tro_13.svg/120px-Paris_transit_icons_-_M%C3%A9tro_13.svg.png"
+  },
+  {
+    "navitia_id": "C01384",
+    "code": "14",
+    "name": "Métro 14",
+    "mode": "metro",
+    "color": "662483",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/Paris_transit_icons_-_M%C3%A9tro_14.svg/120px-Paris_transit_icons_-_M%C3%A9tro_14.svg.png"
+  },
+  {
+    "navitia_id": "C01742",
+    "code": "A",
+    "name": "RER A",
+    "mode": "rer",
+    "color": "E3051C",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/4/4a/Paris_transit_icons_-_RER_A.svg"
+  },
+  {
+    "navitia_id": "C01743",
+    "code": "B",
+    "name": "RER B",
+    "mode": "rer",
+    "color": "5291CE",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/f/fd/Paris_transit_icons_-_RER_B.svg"
+  },
+  {
+    "navitia_id": "C01727",
+    "code": "C",
+    "name": "RER C",
+    "mode": "rer",
+    "color": "FFEA00",
+    "text_color": "000000",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/f/f6/Paris_transit_icons_-_RER_C.svg"
+  },
+  {
+    "navitia_id": "C01728",
+    "code": "D",
+    "name": "RER D",
+    "mode": "rer",
+    "color": "00A06E",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/5/54/Paris_transit_icons_-_RER_D.svg"
+  },
+  {
+    "navitia_id": "C01729",
+    "code": "E",
+    "name": "RER E",
+    "mode": "rer",
+    "color": "B93684",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/a/a8/Paris_transit_icons_-_RER_E.svg"
+  },
+  {
+    "navitia_id": "C01737",
+    "code": "H",
+    "name": "Transilien H",
+    "mode": "transilien",
+    "color": "6E6E00",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/8/84/Paris_transit_icons_-_Train_H.svg"
+  },
+  {
+    "navitia_id": "C01739",
+    "code": "J",
+    "name": "Transilien J",
+    "mode": "transilien",
+    "color": "C9A71C",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/0/0b/Paris_transit_icons_-_Train_J.svg"
+  },
+  {
+    "navitia_id": "C01738",
+    "code": "K",
+    "name": "Transilien K",
+    "mode": "transilien",
+    "color": "9F9825",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/f/f3/Paris_transit_icons_-_Train_K.svg"
+  },
+  {
+    "navitia_id": "C01740",
+    "code": "L",
+    "name": "Transilien L",
+    "mode": "transilien",
+    "color": "8DB7C8",
+    "text_color": "000000",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/8/81/Paris_transit_icons_-_Train_L.svg"
+  },
+  {
+    "navitia_id": "C01736",
+    "code": "N",
+    "name": "Transilien N",
+    "mode": "transilien",
+    "color": "004899",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/4/43/Paris_transit_icons_-_Train_N.svg"
+  },
+  {
+    "navitia_id": "C01730",
+    "code": "P",
+    "name": "Transilien P",
+    "mode": "transilien",
+    "color": "F0A500",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/c/c7/Paris_transit_icons_-_Train_P.svg"
+  },
+  {
+    "navitia_id": "C01731",
+    "code": "R",
+    "name": "Transilien R",
+    "mode": "transilien",
+    "color": "E87B10",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/f/fb/Paris_transit_icons_-_Train_R.svg"
+  },
+  {
+    "navitia_id": "C01741",
+    "code": "U",
+    "name": "Transilien U",
+    "mode": "transilien",
+    "color": "CE007C",
+    "text_color": "FFFFFF",
+    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/d/df/Paris_transit_icons_-_Train_U.svg"
+  }
+]

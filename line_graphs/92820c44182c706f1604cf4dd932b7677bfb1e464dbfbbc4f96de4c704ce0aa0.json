@@ -1,0 +1,232 @@
+{
+    "version": 1,
+    "navitia_id": "C01371",
+    "fetched_at": 1791647954.1322737,
+    "graph": {
+        "stations": {
+            "stop_area:IDFM:415852": {
+                "name": "Hôtel de Ville",
+                "lat": 48.856621,
+                "lon": 2.351538,
+                "neighbors": [
+                    "stop_area:IDFM:71222",
+                    "stop_area:IDFM:71264"
+                ]
+            },
+            "stop_area:IDFM:425779": {
+                "name": "Les Sablons",
+                "lat": 48.879931,
+                "lon": 2.271556,
+                "neighbors": [
+                    "stop_area:IDFM:71379",
+                    "stop_area:IDFM:71442"
+                ]
+            },
+            "stop_area:IDFM:463564": {
+                "name": "Bastille",
+                "lat": 48.852589,
+                "lon": 2.368726,
+                "neighbors": [
+                    "stop_area:IDFM:71222",
+                    "stop_area:IDFM:73626"
+                ]
+            },
+            "stop_area:IDFM:71222": {
+                "name": "Saint-Paul (Le Marais)",
+                "lat": 48.855042,
+                "lon": 2.3615,
+                "neighbors": [
+                    "stop_area:IDFM:415852",
+                    "stop_area:IDFM:463564"
+                ]
+            },
+            "stop_area:IDFM:71264": {
+                "name": "Châtelet",
+                "lat": 48.858354,
+                "lon": 2.348491,
+                "neighbors": [
+                    "stop_area:IDFM:415852",
+                    "stop_area:IDFM:73630"
+                ]
+            },
+            "stop_area:IDFM:71284": {
+                "name": "Tuileries",
+                "lat": 48.864367,
+                "lon": 2.330831,
+                "neighbors": [
+                    "stop_area:IDFM:71297",
+                    "stop_area:IDFM:71298"
+                ]
+            },
+            "stop_area:IDFM:71297": {
+                "name": "Palais Royal - Musée du Louvre",
+                "lat": 48.86253,
+                "lon": 2.336001,
+                "neighbors": [
+                    "stop_area:IDFM:71284",
+                    "stop_area:IDFM:73630"
+                ]
+            },
+            "stop_area:IDFM:71298": {
+                "name": "Concorde",
+                "lat": 48.865566,
+                "lon": 2.321676,
+                "neighbors": [
+                    "stop_area:IDFM:71284",
+                    "stop_area:IDFM:71305"
+                ]
+            },
+            "stop_area:IDFM:71305": {
+                "name": "Champs-Élysées - Clemenceau",
+                "lat": 48.867787,
+                "lon": 2.313665,
+                "neighbors": [
+                    "stop_area:IDFM:71298",
+                    "stop_area:IDFM:71318"
+                ]
+            },
+            "stop_area:IDFM:71318": {
+                "name": "Franklin D. Roosevelt",
+                "lat": 48.869155,
+                "lon": 2.309966,
+                "neighbors": [
+                    "stop_area:IDFM:71305",
+                    "stop_area:IDFM:71328"
+                ]
+            },
+            "stop_area:IDFM:71328": {
+                "name": "George V",
+                "lat": 48.871814,
+                "lon": 2.301001,
+                "neighbors": [
+                    "stop_area:IDFM:71318",
+                    "stop_area:IDFM:71347"
+                ]
+            },
+            "stop_area:IDFM:71347": {
+                "name": "Charles de Gaulle - Étoile",
+                "lat": 48.873545,
+                "lon": 2.295586,
+                "neighbors": [
+                    "stop_area:IDFM:71328",
+                    "stop_area:IDFM:71348"
+                ]
+            },
+            "stop_area:IDFM:71348": {
+                "name": "Argentine",
+                "lat": 48.875613,
+                "lon": 2.289402,
+                "neighbors": [
+                    "stop_area:IDFM:71347",
+                    "stop_area:IDFM:71379"
+                ]
+            },
+            "stop_area:IDFM:71379": {
+                "name": "Neuilly - Porte Maillot",
+                "lat": 48.878064,
+                "lon": 2.282674,
+                "neighbors": [
+                    "stop_area:IDFM:425779",
+                    "stop_area:IDFM:71348"
+                ]
+            },
+            "stop_area:IDFM:71442": {
+                "name": "Pont de Neuilly",
+                "lat": 48.884902,
+                "lon": 2.25952,
+                "neighbors": [
+                    "stop_area:IDFM:425779",
+                    "stop_area:IDFM:71485"
+                ]
+            },
+            "stop_area:IDFM:71485": {
+                "name": "Esplanade de la Défense",
+                "lat": 48.887445,
+                "lon": 2.250408,
+                "neighbors": [
+                    "stop_area:IDFM:71442",
+                    "stop_area:IDFM:71517"
+                ]
+            },
+            "stop_area:IDFM:71517": {
+                "name": "La Défense",
+                "lat": 48.891612,
+                "lon": 2.239601,
+                "neighbors": [
+                    "stop_area:IDFM:71485"
+                ]
+            },
+            "stop_area:IDFM:71634": {
+                "name": "Château de Vincennes",
+                "lat": 48.844271,
+                "lon": 2.440254,
+                "neighbors": [
+                    "stop_area:IDFM:71650"
+                ]
+            },
+            "stop_area:IDFM:71647": {
+                "name": "Saint-Mandé",
+                "lat": 48.846138,
+                "lon": 2.4188,
+                "neighbors": [
+                    "stop_area:IDFM:71650",
+                    "stop_area:IDFM:71663"
+                ]
+            },
+            "stop_area:IDFM:71650": {
+                "name": "Bérault",
+                "lat": 48.845523,
+                "lon": 2.428243,
+                "neighbors": [
+                    "stop_area:IDFM:71634",
+                    "stop_area:IDFM:71647"
+                ]
+            },
+            "stop_area:IDFM:71654": {
+                "name": "Reuilly - Diderot",
+                "lat": 48.847185,
+                "lon": 2.386234,
+                "neighbors": [
+                    "stop_area:IDFM:71673",
+                    "stop_area:IDFM:73626"
+                ]
+            },
+            "stop_area:IDFM:71663": {
+                "name": "Porte de Vincennes",
+                "lat": 48.847153,
+                "lon": 2.409195,
+                "neighbors": [
+                    "stop_area:IDFM:71647",
+                    "stop_area:IDFM:71673"
+                ]
+            },
+            "stop_area:IDFM:71673": {
+                "name": "Nation",
+                "lat": 48.848838,
+                "lon": 2.396333,
+                "neighbors": [
+                    "stop_area:IDFM:71654",
+                    "stop_area:IDFM:71663"
+                ]
+            },
+            "stop_area:IDFM:73626": {
+                "name": "Gare de Lyon",
+                "lat": 48.844569,
+                "lon": 2.375146,
+                "neighbors": [
+                    "stop_area:IDFM:463564",
+                    "stop_area:IDFM:71654"
+                ]
+            },
+            "stop_area:IDFM:73630": {
+                "name": "Louvre - Rivoli",
+                "lat": 48.860896,
+                "lon": 2.340635,
+                "neighbors": [
+                    "stop_area:IDFM:71264",
+                    "stop_area:IDFM:71297"
+                ]
+            }
+        }
+    }
+}

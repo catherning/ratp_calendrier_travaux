@@ -1,0 +1,45 @@
+name: ratp-calendrier-travaux
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ratp-travaux-backend:latest
+    container_name: ratp-backend
+    user: "${BACKEND_UID:-1000}:${BACKEND_GID:-1000}"
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - PORT=8000
+      - LINE_GRAPH_DATA_DIR=/app/data/line_graphs
+    volumes:
+      - type: bind
+        source: ./line_graphs
+        target: /app/data/line_graphs
+        bind:
+          create_host_path: false
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
+        - NEXT_PUBLIC_CARTO_API_KEY=${CARTO_API_KEY:?Define CARTO_API_KEY in the project .env file}
+    image: ratp-travaux-frontend:latest
+    container_name: ratp-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
