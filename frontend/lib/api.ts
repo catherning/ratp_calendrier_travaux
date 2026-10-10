@@ -1,4 +1,4 @@
-import { DisruptionDetail, LineInfo, PlaceResult, JourneyDisruptionResponse, StationInfo, LineStationsData } from "./types";
+import { DisruptionDetail, DisruptionStatistics, LineInfo, PlaceResult, JourneyDisruptionResponse, StationInfo, LineStationsData } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -15,6 +15,10 @@ async function apiFetch<T>(path: string, params?: Record<string, string>): Promi
 }
 
 export const api = {
+  getStatistics(): Promise<DisruptionStatistics> {
+    return apiFetch<DisruptionStatistics>("/statistics");
+  },
+
   getLines(): Promise<LineInfo[]> {
     return apiFetch<LineInfo[]>("/lines");
   },

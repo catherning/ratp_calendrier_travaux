@@ -46,6 +46,67 @@ Download files from https://prim.iledefrance-mobilites.fr/fr/jeux-de-donnees/off
 - After running the backend application, the `data/data.json` file will be populated with construction details.
 - Open the Streamlit app in your web browser to view the construction details, download ICS files, and access Google Calendar links.
 
+## Line metadata catalogue
+
+`src/domain/lines.json` is the single source of line metadata (code, Navitia ID,
+name, mode, colours and logo). Its array order is the frontend display order.
+`src/domain/lines.py` loads it once at startup and derives `LINE_REGISTRY` and
+all code lists from it. Missing files, invalid fields, empty catalogues and
+duplicate codes or Navitia IDs fail explicitly rather than silently hide lines.
+The catalogue is included in Python packages and the backend image. Restart
+the backend after changing it (rebuild the image for container deployments).
+
+Generated station graphs remain separate in `line_graphs/`, keyed by Navitia ID.
+Graph generation never writes metadata; listing lines and fetching disruptions
+does not require a graph file. Métro 15 remains excluded from the catalogue.
+
+### Checking official line identifiers
+
+Use the public [IDFM line reference API](https://data.iledefrance-mobilites.fr/explore/dataset/referentiel-des-lignes/).
+It needs no API key. Select by line code **and network**, not code alone:
+
+```sh
+curl --fail --get \
+  'https://data.iledefrance-mobilites.fr/api/explore/v2.1/catalog/datasets/referentiel-des-lignes/records' \
+  --data-urlencode "where=(shortname_line='E' and networkname='RER') or (shortname_line='L' and networkname='Transilien')" \
+  --data-urlencode 'select=id_line,shortname_line,networkname,status' \
+  --data-urlencode 'limit=10'
+```
+
+Checked against the official reference on 2026-10-10: RER E is `C01729` and
+Transilien L is `C01740`. Navitia uses the full IDs `line:IDFM:C01729` and
+`line:IDFM:C01740`; authenticated `GET /lines/{URL-encoded full ID}` can also
+confirm the line identity using the backend's PRIM API key.
+The same reference corrects RER C to `C01727`, RER D to `C01728` and
+Transilien P to `C01730`.
+
+After these ID corrections, generate any missing graphs with
+`uv run python -m scratch.generate_static_graph --missing-only`.
+Do not rename existing graphs to match display codes: existing files represent
+the Navitia ID they were generated from. In particular, `C01740` is the graph
+for L, not E. No graph files are moved or deleted by the metadata migration.
+
+## Network statistics
+
+The Next.js `/stats` page, linked from the dashboard, covers every line in the
+line registry (Métro, RER and Transilien). `GET /statistics` uses the existing
+Navitia line-report cache (up to five minutes) and calendar relevance rules:
+impacting effects only, no elevator alerts and no `perturbation` cause.
+Only impacts with at least one current or future normalized period are counted,
+using Paris local time. This is a snapshot, not historical statistics.
+
+The total and effect/cause breakdowns count unique `impact_id` values, not
+calendar periods. Per-line counts deduplicate the same impact within each line;
+a shared impact counts on each affected line, so their sum can exceed the total.
+The page ranks all lines and displays lines with/without disruptions.
+Missing causes are explicitly labelled as unspecified.
+
+Upstream requests are limited to four concurrent calls and shared Navitia IDs
+are fetched once per request. Failed lines have a null count and appear as
+unavailable, never as disruption-free. Partial results carry `failed_lines` and
+an explicit warning; their totals cover successful lines only. All upstream
+calls failing returns HTTP 502; an unconfigured API key returns HTTP 503.
+
 ## Docker Compose frontend map key
 
 The frontend map uses a CARTO Basemaps key, separate from `NAVITIA_API_KEY`. Add it as `CARTO_API_KEY` in the project-root `.env` file before building the frontend with Docker Compose. Compose passes it to the Next.js build as `NEXT_PUBLIC_CARTO_API_KEY`; this value is included in browser code, so restrict the key to your site's allowed hostnames in the CARTO dashboard. Never use the Navitia key for CARTO.
@@ -57,6 +118,11 @@ docker compose up --build
 
 
 ## Persistent station graphs and administration
+
+```
+uv run python -m scratch.generate_static_graph --missing-only
+```
+To generate the missing graphs
 
 The map graph is built **only by an explicit administration update**, from Navitia
 `/lines/{id}/vehicle_journeys`, using the ordered `stop_times` of the

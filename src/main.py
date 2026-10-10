@@ -3,6 +3,7 @@ FastAPI application – RATP Travaux API.
 
 Endpoints:
   GET /lines                                  → list all supported lines
+  GET /statistics                             → network disruption statistics
   GET /lines/stations?lines=2,A                → read permanent station graphs
   POST /admin/lines/stations/refresh?lines=2,A → protected graph update
   GET /places?q=<query>                       → proxy Navitia /places (stop area search)
@@ -18,6 +19,7 @@ from contextlib import asynccontextmanager
 import logging
 import os
 import secrets
+from datetime import datetime, timezone
 
 from collections import defaultdict
 from dotenv import load_dotenv
@@ -44,6 +46,7 @@ from src.domain.lines import (
     LineInfo,
     get_line,
 )
+from src.domain.statistics import DisruptionStatistics, build_statistics
 from src.services.ics_generator import build_google_calendar_url, build_ics_bytes, build_bulk_ics_bytes
 from src.services.navitia_client import (
     fetch_line_reports, fetch_places, fetch_journeys, fetch_line_stations,
@@ -195,6 +198,37 @@ def parse_navitia_journey(journey: dict) -> tuple[JourneyItinerary, dict[str, li
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
+
+@app.get("/statistics", response_model=DisruptionStatistics, summary="Disruption statistics for all supported lines")
+async def get_statistics(
+    client: httpx.AsyncClient = Depends(get_client),
+) -> DisruptionStatistics:
+    if not API_KEY:
+        raise HTTPException(status_code=503, detail="NAVITIA_API_KEY is not configured")
+
+    semaphore = asyncio.Semaphore(4)
+
+    async def fetch_report(navitia_id: str) -> tuple[str, dict | None]:
+        async with semaphore:
+            try:
+                raw = await fetch_line_reports(navitia_id, API_KEY, client=client)
+                return navitia_id, raw
+            except (httpx.HTTPError, ValueError) as exc:
+                logger.error("Statistics: failed to fetch line %s: %s", navitia_id, exc)
+                return navitia_id, None
+
+    navitia_ids = dict.fromkeys(LINE_REGISTRY[code].navitia_id for code in ALL_CODES)
+    reports = dict(await asyncio.gather(*(fetch_report(line_id) for line_id in navitia_ids)))
+    if all(raw is None for raw in reports.values()):
+        raise HTTPException(status_code=502, detail="Unable to fetch network disruption statistics")
+
+    disruptions_by_line: dict[str, list[DisruptionDetail] | None] = {}
+    for code in ALL_CODES:
+        info = LINE_REGISTRY[code]
+        raw = reports[info.navitia_id]
+        disruptions_by_line[code] = normalize_line_disruptions(raw, info) if raw is not None else None
+    return build_statistics(disruptions_by_line, datetime.now(timezone.utc))
+
 
 @app.get("/lines", summary="List all supported transit lines")
 def get_lines() -> list[dict]:

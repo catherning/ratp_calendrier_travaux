@@ -8,6 +8,7 @@ import LineSelector from "@/components/LineSelector";
 import DisruptionCard from "@/components/DisruptionCard";
 import DisruptionCalendar from "@/components/DisruptionCalendar";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 
 const DisruptionMap = dynamic(() => import("@/components/DisruptionMap"), {
   ssr: false,
@@ -276,6 +277,7 @@ export default function Home() {
             <p className="app-header__subtitle">Tableau de bord des Travaux & Interruptions de Service</p>
           </div>
         </div>
+        <Link href="/stats" className="btn btn--secondary">Statistiques du réseau</Link>
         <div className="app-header__badge">
           <span className="pulse-indicator"></span> Temps Réel
         </div>

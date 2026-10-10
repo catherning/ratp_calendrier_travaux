@@ -8,6 +8,25 @@ export interface LineInfo {
   logo_url: string;
 }
 
+export interface CategoryCount {
+  type: string;
+  count: number;
+}
+
+export interface DisruptionStatistics {
+  generated_at: string;
+  total_disruptions: number;
+  total_lines: number;
+  lines_with_disruptions: number;
+  lines_without_disruptions: number;
+  failed_lines: string[];
+  lines: (Pick<LineInfo, "code" | "name" | "mode" | "color" | "text_color"> & {
+    disruption_count: number | null;
+  })[];
+  effects: CategoryCount[];
+  causes: CategoryCount[];
+}
+
 export interface DisruptionPeriod {
   period_index: number;
   date_debut: string;
