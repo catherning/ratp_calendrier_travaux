@@ -13,6 +13,9 @@ services:
       - .env
     environment:
       - PORT=8000
+      - LINE_GRAPH_DATA_DIR=/app/data/line_graphs
+    volumes:
+      - line-graphs:/app/data/line_graphs
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -26,6 +29,7 @@ services:
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_API_URL=http://localhost:8000
+        - NEXT_PUBLIC_CARTO_API_KEY=${CARTO_API_KEY:?Define CARTO_API_KEY in the project .env file}
     image: ratp-travaux-frontend:latest
     container_name: ratp-frontend
     ports:
@@ -34,3 +38,6 @@ services:
       backend:
         condition: service_started
     restart: unless-stopped
+
+volumes:
+  line-graphs:

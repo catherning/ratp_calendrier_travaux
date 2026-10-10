@@ -3,6 +3,8 @@ FastAPI application – RATP Travaux API.
 
 Endpoints:
   GET /lines                                  → list all supported lines
+  GET /lines/stations?lines=2,A                → read permanent station graphs
+  POST /admin/lines/stations/refresh?lines=2,A → protected graph update
   GET /places?q=<query>                       → proxy Navitia /places (stop area search)
   GET /disruptions?lines=4,A,H               → fetch + normalise disruptions
   GET /disruptions/{impact_id}/ics            → download ICS file (single or grouped)
@@ -15,12 +17,13 @@ import asyncio
 from contextlib import asynccontextmanager
 import logging
 import os
+import secrets
 
 from collections import defaultdict
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Request, Depends
+from fastapi import FastAPI, HTTPException, Query, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 import httpx
 
 from src.domain.disruptions import (
@@ -42,7 +45,10 @@ from src.domain.lines import (
     get_line,
 )
 from src.services.ics_generator import build_google_calendar_url, build_ics_bytes, build_bulk_ics_bytes
-from src.services.navitia_client import fetch_line_reports, fetch_places, fetch_journeys, fetch_line_stations
+from src.services.navitia_client import (
+    fetch_line_reports, fetch_places, fetch_journeys, fetch_line_stations,
+    refresh_line_stations, GraphRefreshInProgress,
+)
 
 
 # ── Bootstrap ──────────────────────────────────────────────────────────────────
@@ -208,34 +214,83 @@ def get_lines() -> list[dict]:
     return result
 
 
-@app.get("/lines/stations", summary="Fetch stations for selected lines")
-async def get_lines_stations(
-    lines: str = Query(..., description="Comma-separated line codes, e.g. '1,4,A'"),
-    client: httpx.AsyncClient = Depends(get_client),
-) -> dict[str, dict]:
-    """
-    Fetch the stations and ordered routes for each requested line.
-    Returns a dict mapping line code to dict with 'stations' and 'routes'.
-    """
-    codes = [c.strip() for c in lines.split(",") if c.strip()]
+def _station_line_codes(lines: str) -> list[str]:
+    codes = list(dict.fromkeys(c.strip() for c in lines.split(",") if c.strip()))
     if not codes:
         raise HTTPException(status_code=422, detail="No valid line codes provided")
 
     unknown = [c for c in codes if c not in LINE_REGISTRY]
     if unknown:
         raise HTTPException(status_code=422, detail=f"Unknown line codes: {unknown}")
+    return codes
+
+
+def require_admin_key(x_admin_key: str | None = Header(None)) -> None:
+    expected = os.getenv("ADMIN_API_KEY", "")
+    if not expected:
+        logger.warning("Station graph administration is disabled: ADMIN_API_KEY is unset")
+        raise HTTPException(status_code=503, detail="Station graph administration is disabled")
+    if not x_admin_key or not secrets.compare_digest(x_admin_key.encode(), expected.encode()):
+        logger.warning("Rejected unauthenticated station graph administration request")
+        raise HTTPException(status_code=401, detail="Invalid administration credentials")
+
+
+@app.get("/lines/stations", summary="Read persisted stations for selected lines")
+async def get_lines_stations(
+    lines: str = Query(..., description="Comma-separated line codes, e.g. '1,4,A'"),
+    refresh: bool = Query(False, deprecated=True, description="No longer supported; use the protected admin POST"),
+) -> dict[str, dict]:
+    if refresh:
+        raise HTTPException(status_code=422, detail="Use POST /admin/lines/stations/refresh to update graphs")
+    codes = _station_line_codes(lines)
 
     async def _fetch_one_stations(code: str) -> tuple[str, dict]:
         line_info = LINE_REGISTRY[code]
         try:
-            res = await fetch_line_stations(line_info.navitia_id, API_KEY, client=client)
+            res = await fetch_line_stations(line_info.navitia_id)
             return code, res
-        except Exception as exc:
-            logger.error("Failed to fetch stations for line %s: %s", code, exc)
-            return code, {"stations": [], "routes": []}
+        except (ValueError, OSError) as exc:
+            logger.error("Unable to read persisted graph for line %s: %s", code, exc)
+            raise HTTPException(
+                status_code=503,
+                detail=f"Station graph unavailable for line {code}; an administrator must populate it",
+            ) from exc
 
     results = await asyncio.gather(*[_fetch_one_stations(c) for c in codes])
     return {code: res for code, res in results}
+
+
+@app.post(
+    "/admin/lines/stations/refresh",
+    summary="Rebuild and persist selected station graphs",
+    dependencies=[Depends(require_admin_key)],
+)
+async def update_lines_stations(
+    lines: str = Query(..., description="Explicit line codes to update, e.g. '2,A'"),
+    client: httpx.AsyncClient = Depends(get_client),
+) -> JSONResponse:
+    codes = _station_line_codes(lines)
+    results: dict[str, dict] = {}
+    for code in codes:
+        try:
+            graph = await refresh_line_stations(LINE_REGISTRY[code].navitia_id, API_KEY, client)
+            stations = graph["stations"]
+            results[code] = {
+                "status": "updated",
+                "station_count": len(stations),
+                "link_count": sum(len(station["neighbors"]) for station in stations.values()) // 2,
+            }
+        except GraphRefreshInProgress:
+            results[code] = {"status": "busy", "detail": "A refresh is already running"}
+        except (httpx.HTTPError, ValueError, OSError) as exc:
+            logger.error("Station graph update failed for line %s: %s", code, exc)
+            results[code] = {
+                "status": "failed",
+                "detail": "Update failed; any previously persisted graph is unchanged",
+            }
+    statuses = {result["status"] for result in results.values()}
+    status_code = 502 if "failed" in statuses else 409 if "busy" in statuses else 200
+    return JSONResponse(status_code=status_code, content={"lines": results})
 
 
 @app.get("/places", summary="Search for stop areas by name")

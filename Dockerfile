@@ -17,7 +17,8 @@ COPY src ./src
 
 RUN pip install --no-cache-dir .
 
-RUN chown -R appuser:appuser /app
+RUN mkdir -p /app/data/line_graphs \
+    && chown -R appuser:appuser /app
 
 USER appuser
 

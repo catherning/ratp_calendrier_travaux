@@ -53,6 +53,8 @@ export default function Home() {
   // Stations state for map
   const [stations, setStations] = useState<Record<string, LineStationsData>>({});
   const [stationsLoading, setStationsLoading] = useState(false);
+  const [stationErrors, setStationErrors] = useState<string[]>([]);
+  const [stationRetry, setStationRetry] = useState(0);
 
   // Date Filters state
   const [startDate, setStartDate] = useState<string>(() => {
@@ -153,26 +155,37 @@ export default function Home() {
   useEffect(() => {
     if (activeLineCodes.length === 0) {
       setStations({});
+      setStationsLoading(false);
+      setStationErrors([]);
       return;
     }
 
     let active = true;
     setStationsLoading(true);
-    api.getLineStations(activeLineCodes)
-      .then((data) => {
-        if (active) setStations(data);
-      })
-      .catch((err) => {
-        console.error("Failed to load stations:", err);
-      })
-      .finally(() => {
-        if (active) setStationsLoading(false);
-      });
+    setStationErrors([]);
+    setStations((previous) => Object.fromEntries(
+      Object.entries(previous).filter(([code]) => activeLineCodes.includes(code))
+    ));
+    // A failed or slow line must not prevent the other lines from appearing.
+    Promise.all(activeLineCodes.map(async (code) => {
+      try {
+        const data = await api.getLineStations([code]);
+        if (!data[code] || Object.keys(data[code].stations).length === 0) {
+          throw new Error(`No station graph returned for line ${code}`);
+        }
+        if (active) setStations((previous) => ({ ...previous, [code]: data[code] }));
+      } catch (err) {
+        console.error(`Failed to load stations for line ${code}:`, err);
+        if (active) setStationErrors((previous) => [...previous, code]);
+      }
+    })).finally(() => {
+      if (active) setStationsLoading(false);
+    });
 
     return () => {
       active = false;
     };
-  }, [activeLineCodes]);
+  }, [activeLineCodes, stationRetry]);
 
   // Helper to check if a disruption impacts the currently active route itinerary
   const getDisruptionImpactsActiveRoute = (d: DisruptionDetail) => {
@@ -677,6 +690,23 @@ export default function Home() {
             {!loading && !error && (
               <>
                 {viewMode === "map" ? (
+                  <>
+                    {stationsLoading && (
+                      <p role="status">Chargement des stations et des tracés des lignes...</p>
+                    )}
+                    {stationErrors.length > 0 && (
+                      <div className="state-message state-message--error" role="alert">
+                        <p>Impossible de charger les tracés des lignes : {stationErrors.join(", ")}. Les autres lignes restent affichées.</p>
+                        <button
+                          type="button"
+                          className="btn btn--primary btn--small"
+                          disabled={stationsLoading}
+                          onClick={() => setStationRetry((previous) => previous + 1)}
+                        >
+                          Réessayer le chargement des tracés
+                        </button>
+                      </div>
+                    )}
                   <div className="card map-card" style={{ height: "650px", minHeight: "650px", position: "relative" }}>
                     <DisruptionMap
                       disruptions={filteredDisruptions}
@@ -686,6 +716,7 @@ export default function Home() {
                       activeItinerary={isJourneyMode ? activeItinerary : null}
                     />
                   </div>
+                  </>
                 ) : filteredDisruptions.length === 0 ? (
                   <div className="state-message state-message--empty">
                     <h3>🌿 Pas de travaux détectés sur le trajet</h3>

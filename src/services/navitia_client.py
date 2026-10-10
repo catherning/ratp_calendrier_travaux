@@ -1,12 +1,17 @@
 """
 Async HTTP client for the Navitia / PRIM API.
-All responses are cached in-process with a TTL to avoid hammering the API.
+Traffic responses are cached in-process. Station graphs are permanent files
+and are only rebuilt by explicit administrative updates.
 """
+import asyncio
 import logging
 import time
 from urllib.parse import quote
 
 import httpx
+
+from src.domain.line_graph import LineGraph, LineGraphBuilder
+from src.services.line_graph_cache import read_graph, write_graph
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +23,11 @@ NAVITIA_BASE = "https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia"
 _line_reports_cache: dict[str, tuple[dict, float]] = {}
 _places_cache: dict[str, tuple[list, float]] = {}
 _journeys_cache: dict[str, tuple[dict, float]] = {}
-_line_stations_cache: dict[str, tuple[list, float]] = {}
+_line_stations_locks: dict[str, asyncio.Lock] = {}
 
 LINE_REPORTS_TTL = 300.0   # 5 minutes
 PLACES_TTL = 600.0         # 10 minutes
 JOURNEYS_TTL = 300.0       # 5 minutes
-LINE_STATIONS_TTL = 86400.0 # 24 hours (station lists are static)
 
 
 def _cache_get(cache: dict, key: str) -> dict | list | None:
@@ -155,146 +159,100 @@ async def fetch_journeys(
 
 async def fetch_line_stations(
     navitia_id: str,
+) -> LineGraph:
+    """Read the permanent graph only. Never call Navitia on a public request."""
+    entry = await asyncio.to_thread(read_graph, navitia_id)
+    if entry is None:
+        raise FileNotFoundError(f"No persisted station graph for {navitia_id}")
+    return entry[0]
+
+
+class GraphRefreshInProgress(RuntimeError):
+    pass
+
+
+async def refresh_line_stations(
+    navitia_id: str,
     api_key: str,
     client: httpx.AsyncClient | None = None,
-) -> dict:
-    """
-    Fetch the stations and adjacent neighbor links for a line as a graph.
-    navitia_id: short code like 'C01374'.
-    Returns a dict with 'stations' mapping station ID to details (name, lat, lon, neighbors).
-    """
-    cached = _cache_get(_line_stations_cache, navitia_id)
-    if cached is not None:
-        logger.debug("Cache hit: line_stations for %s", navitia_id)
-        return cached  # type: ignore[return-value]
+) -> LineGraph:
+    """Replace the graph only after a complete build and successful disk write."""
+    lock = _line_stations_locks.setdefault(navitia_id, asyncio.Lock())
+    if lock.locked():
+        raise GraphRefreshInProgress(f"Graph refresh already running for {navitia_id}")
+    async with lock:
+        graph = await _fetch_line_graph(navitia_id, api_key, client)
+        await asyncio.to_thread(write_graph, navitia_id, graph, time.time())
+        return graph
 
-    # Try loading from the pre-populated local static track graph database first
-    import os
-    import json
-    try:
-        static_file = os.path.join(os.getcwd(), "data", "static_lines_graph.json")
-        if os.path.exists(static_file):
-            with open(static_file, "r", encoding="utf-8") as f:
-                static_db = json.load(f)
-            
-            from src.domain.lines import LINE_REGISTRY
-            line_code = None
-            for code, info in LINE_REGISTRY.items():
-                if info.navitia_id == navitia_id:
-                    line_code = code
-                    break
-            
-            if line_code and line_code in static_db:
-                logger.info("Serving static pre-populated tracks graph for Line %s (%s)", line_code, navitia_id)
-                res = static_db[line_code]
-                _cache_set(_line_stations_cache, navitia_id, res, LINE_STATIONS_TTL)
-                return res
-    except Exception as exc:
-        logger.error("Error loading static pre-populated tracks graph for %s: %s", navitia_id, exc)
 
-    from datetime import datetime, timezone
-    now_str = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-
-    full_id = f"line:IDFM:{navitia_id}"
-    url = f"{NAVITIA_BASE}/lines/{quote(full_id, safe='')}/route_schedules"
-    params = {
-        "from_datetime": now_str,
-        "items_per_schedule": "2"
-    }
-
-    logger.info("Fetching line_stations (route_schedules) as fallback graph for %s (time: %s)", navitia_id, now_str)
-    stations_db = {}
-
-    try:
-        resp = await _get_with_fallback(url, headers={"apikey": api_key}, params=params, timeout=12.0, client=client)
-        if resp.status_code == 200:
-            data = resp.json()
-            route_schedules = data.get("route_schedules", [])
-            for rs in route_schedules:
-                rows = rs.get("table", {}).get("rows", [])
-                if not rows:
+async def _fetch_line_graph(
+    navitia_id: str, api_key: str, client: httpx.AsyncClient | None,
+) -> LineGraph:
+    full_id = quote(f"line:IDFM:{navitia_id}", safe="")
+    url = f"{NAVITIA_BASE}/lines/{full_id}/vehicle_journeys"
+    builder = LineGraphBuilder()
+    received = 0
+    total: int | None = None
+    logger.info("Building base-schedule station graph for %s", navitia_id)
+    # No since/until filter: include branches and short turns outside today's service.
+    for page in range(1000):
+        response = await _get_with_fallback(
+            url, headers={"apikey": api_key},
+            params={
+                "count": 1000, "start_page": page, "depth": 2,
+                "data_freshness": "base_schedule", "disable_geojson": "true",
+            },
+            timeout=60.0, client=client,
+        )
+        response.raise_for_status()
+        data = response.json()
+        journeys = data.get("vehicle_journeys", [])
+        pagination = data.get("pagination", {})
+        reported_total = pagination.get("total_result")
+        if not isinstance(reported_total, int) or reported_total < 1:
+            raise ValueError("Missing or empty vehicle_journeys pagination")
+        if total is not None and total != reported_total:
+            raise ValueError("Navitia dataset changed during graph pagination")
+        total = reported_total
+        if not journeys:
+            raise ValueError("Incomplete vehicle_journeys pagination")
+        for journey in journeys:
+            if not journey.get("stop_times"):
+                journey_id = journey.get("id")
+                if not journey_id:
+                    raise ValueError("Vehicle journey without stop_times or identity")
+                detail = await _get_with_fallback(
+                    f"{NAVITIA_BASE}/vehicle_journeys/{quote(journey_id, safe='')}",
+                    headers={"apikey": api_key},
+                    params={"depth": 2, "disable_geojson": "true", "data_freshness": "base_schedule"},
+                    timeout=60.0, client=client,
+                )
+                detail.raise_for_status()
+                matches = [
+                    item for item in detail.json().get("vehicle_journeys", [])
+                    if item.get("id") == journey_id
+                ]
+                if len(matches) != 1:
+                    raise ValueError(f"Missing vehicle journey detail for {journey_id}")
+                journey = matches[0]
+                if not journey.get("stop_times"):
+                    logger.warning(
+                        "Ignoring empty vehicle journey %s for line %s: "
+                        "no stop_times in collection or detail",
+                        journey_id, navitia_id,
+                    )
                     continue
-
-                path_ids = []
-                for row in rows:
-                    sp = row.get("stop_point", {})
-                    name = sp.get("name", "").split("(")[0].strip()
-                    stop_area_id = sp.get("stop_area", {}).get("id") or sp.get("id")
-
-                    coord = sp.get("coord")
-                    if not coord or "lat" not in coord or "lon" not in coord:
-                        continue
-
-                    try:
-                        lat = float(coord["lat"])
-                        lon = float(coord["lon"])
-                    except ValueError:
-                        continue
-
-                    if stop_area_id not in stations_db:
-                        stations_db[stop_area_id] = {
-                            "name": name,
-                            "lat": lat,
-                            "lon": lon,
-                            "neighbors": set()
-                        }
-                    path_ids.append(stop_area_id)
-
-                for i in range(len(path_ids) - 1):
-                    id_a = path_ids[i]
-                    id_b = path_ids[i+1]
-                    stations_db[id_a]["neighbors"].add(id_b)
-                    stations_db[id_b]["neighbors"].add(id_a)
-    except Exception as e:
-        logger.error("Error fallback fetching route_schedules for graph %s: %s", navitia_id, e)
-
-    # Fallback to stop_points if no routes were parsed successfully
-    if not stations_db:
-        logger.warning("No route schedules found for graph %s, falling back to stop_points", navitia_id)
-        url_fb = f"{NAVITIA_BASE}/lines/{quote(full_id, safe='')}/stop_points"
-        try:
-            resp_fb = await _get_with_fallback(url_fb, headers={"apikey": api_key}, timeout=12.0, client=client)
-            if resp_fb.status_code == 200:
-                data_fb = resp_fb.json()
-                stop_points = data_fb.get("stop_points", [])
-                for sp in stop_points:
-                    name = sp.get("name", "").split("(")[0].strip()
-                    stop_area_id = sp.get("stop_area", {}).get("id") or sp.get("id")
-
-                    coord = sp.get("coord") or sp.get("stop_area", {}).get("coord")
-                    if not coord or "lat" not in coord or "lon" not in coord:
-                        continue
-
-                    try:
-                        lat = float(coord["lat"])
-                        lon = float(coord["lon"])
-                    except ValueError:
-                        continue
-
-                    if stop_area_id not in stations_db:
-                        stations_db[stop_area_id] = {
-                            "name": name,
-                            "lat": lat,
-                            "lon": lon,
-                            "neighbors": set()
-                        }
-        except Exception as e:
-            logger.error("Error fallback fetching stop_points for graph %s: %s", navitia_id, e)
-
-    # Convert neighbors set to serializable list
-    serializable_stations = {}
-    for st_id, info in stations_db.items():
-        serializable_stations[st_id] = {
-            "name": info["name"],
-            "lat": info["lat"],
-            "lon": info["lon"],
-            "neighbors": sorted(list(info["neighbors"])) if isinstance(info["neighbors"], (set, list)) else []
-        }
-
-    result = {
-        "stations": serializable_stations
-    }
-
-    _cache_set(_line_stations_cache, navitia_id, result, LINE_STATIONS_TTL)
-    return result
-
+                logger.info("Recovered stop_times from detail for %s", journey_id)
+            builder.add_journey(journey)
+        received += len(journeys)
+        if received == total:
+            graph = builder.build()
+            logger.info(
+                "Built station graph for %s: %d journeys, %d distinct paths, %d stations",
+                navitia_id, received, len(builder.paths), len(graph["stations"]),
+            )
+            return graph
+        if received > total:
+            raise ValueError("Inconsistent vehicle_journeys pagination")
+    raise ValueError("Too many vehicle_journeys pages; graph was not cached")

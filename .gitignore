@@ -3,6 +3,7 @@ node_modules/
 .env
 .venv/
 __pycache__/
+data/line_graphs/
 
 # Frontend
 # dependencies
@@ -44,3 +45,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+src/downloaded_files/driver_fixing.lock
+src/downloaded_files/pipfinding.lock
+src/downloaded_files/pipinstall.lock

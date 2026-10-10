@@ -365,10 +365,14 @@ export default function DisruptionMap({ disruptions, stations, onDisruptionClick
     L.control.zoom({ position: "bottomright" }).addTo(map);
 
     // Load CartoDB Dark Matter tiles (simplified vector-like transit styling)
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    const cartoApiKey = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+    L.tileLayer(
+      `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(cartoApiKey ?? "")}`,
+      {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
       maxZoom: 19,
-    }).addTo(map);
+      }
+    ).addTo(map);
 
     // Setup Layer Groups
     const stationsLayer = L.layerGroup().addTo(map);
