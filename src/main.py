@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 import logging
 import os
 
+from collections import defaultdict
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,10 +56,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 API_KEY = os.getenv("NAVITIA_API_KEY") or ""
-if not API_KEY:
-    logger.warning("NAVITIA_API_KEY is not set – API calls will fail.")
-else:
+if API_KEY:
     logger.info("API Key successfully loaded from environment.")
+else:
+    logger.warning("NAVITIA_API_KEY is not set – API calls will fail.")
 
 _allowed_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")]
 
@@ -94,9 +95,18 @@ def get_client(request: Request) -> httpx.AsyncClient:
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def parse_navitia_journey(journey: dict) -> tuple[JourneyItinerary, dict[str, list[dict]]]:
-    """Parse a raw Navitia journey into a JourneyItinerary model and return a line stops map."""
+    """Parse a raw Navitia journey into a JourneyItinerary model and return a line stops map.
+    
+    Args:
+        journey: A raw Navitia journey dictionary.
+    
+    Returns:
+        A tuple containing:
+        - JourneyItinerary: The parsed journey itinerary model.
+        - line_stops_map: A mapping of line codes to lists of stop dictionaries representing stations/stops on each line.
+    """
     sections_list = []
-    line_stops_map: dict[str, list[dict]] = {}
+    line_stops_map: defaultdict[str, list[dict]] = defaultdict(list)
 
     for section in journey.get("sections", []):
         sec_type = section.get("type", "")
@@ -112,16 +122,25 @@ def parse_navitia_journey(journey: dict) -> tuple[JourneyItinerary, dict[str, li
             line_text_color = display_info.get("text_color")
             physical_mode = display_info.get("physical_mode", "").lower()
             commercial_mode = display_info.get("commercial_mode", "").lower()
-            if "métro" in physical_mode or "metro" in physical_mode or "métro" in commercial_mode or "metro" in commercial_mode:
-                mode = "metro"
-            elif "rer" in physical_mode or "rer" in commercial_mode:
-                mode = "rer"
-            elif "train" in physical_mode or "transilien" in physical_mode or "train" in commercial_mode or "transilien" in commercial_mode:
-                mode = "train"
-            elif "tram" in physical_mode or "tramway" in physical_mode or "tram" in commercial_mode or "tramway" in commercial_mode:
-                mode = "tram"
-            else:
-                mode = "bus"
+            
+            # Map mode keywords to mode types
+            mode_keywords = {
+                # mode_type: (keywords)
+                "metro": ("métro", "metro"),
+                "rer": ("rer",),
+                "train": ("train", "transilien"),
+                "tram": ("tram", "tramway"),
+            }
+            
+            # Default mode is bus
+            mode = "bus"
+            combined_modes = f"{physical_mode} {commercial_mode}".lower()
+            # Check combined modes against mode keywords to determine transport type
+            for mode_type, keywords in mode_keywords.items():
+                if any(keyword in combined_modes for keyword in keywords):
+                    mode = mode_type
+                    break
+                
         else:
             mode = section.get("mode")
 
@@ -156,8 +175,6 @@ def parse_navitia_journey(journey: dict) -> tuple[JourneyItinerary, dict[str, li
                         "id": sp.get("id"),
                         "name": sp.get("name", "").split("(")[0].strip()
                     })
-            if line_code not in line_stops_map:
-                line_stops_map[line_code] = []
             line_stops_map[line_code].extend(stops)
 
     journey_itinerary = JourneyItinerary(
