@@ -48,3 +48,8 @@ next-env.d.ts
 src/downloaded_files/driver_fixing.lock
 src/downloaded_files/pipfinding.lock
 src/downloaded_files/pipinstall.lock
+ratp_calendrier_travaux.egg-info/dependency_links.txt
+ratp_calendrier_travaux.egg-info/PKG-INFO
+ratp_calendrier_travaux.egg-info/requires.txt
+ratp_calendrier_travaux.egg-info/SOURCES.txt
+ratp_calendrier_travaux.egg-info/top_level.txt
