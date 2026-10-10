@@ -364,6 +364,60 @@ async def test_admin_refresh_updates_persistent_data_and_deduplicates_lines(admi
 
 
 @pytest.mark.asyncio
+async def test_admin_all_updates_every_line_sequentially(admin_client, monkeypatch):
+    from src.domain.lines import LINE_REGISTRY
+    calls = []
+    active = 0
+
+    async def mock_build(navitia_id, api_key, client):
+        nonlocal active
+        active += 1
+        assert active == 1
+        await asyncio.sleep(0)
+        calls.append(navitia_id)
+        active -= 1
+        return build(["a", "b"])
+
+    monkeypatch.setattr(navitia_client, "_fetch_line_graph", mock_build)
+    async with admin_client as client:
+        response = await client.post(
+            "/admin/lines/stations/refresh?lines=all",
+            headers={"X-Admin-Key": "test-admin-key"},
+        )
+        assert response.status_code == 200
+        assert set(response.json()["lines"]) == set(LINE_REGISTRY)
+        assert (await client.get("/lines/stations?lines=all")).status_code == 422
+    assert calls == [line.navitia_id for line in LINE_REGISTRY.values()]
+
+
+@pytest.mark.asyncio
+async def test_script_missing_only_preserves_existing_files_and_continues_after_failure(
+    isolated_cache, monkeypatch,
+):
+    import scratch.generate_static_graph as script
+    monkeypatch.setenv("NAVITIA_API_KEY", "test-key")
+    monkeypatch.setattr(script, "load_dotenv", lambda *args: None)
+    line_graph_cache.write_graph("C01371", build(["a", "b"]), time.time())
+    original = line_graph_cache._cache_path("C01371").read_bytes()
+    calls = []
+
+    async def mock_refresh(navitia_id, api_key, client):
+        calls.append(navitia_id)
+        if navitia_id == "C01372":
+            raise httpx.ReadTimeout("Upstream timeout")
+        graph = build(["a", "b", "c"])
+        line_graph_cache.write_graph(navitia_id, graph, time.time())
+        return graph
+
+    monkeypatch.setattr(script, "refresh_line_stations", mock_refresh)
+    with pytest.raises(SystemExit, match="2"):
+        await script.generate_static_graph(["1", "2", "3"], missing_only=True)
+    assert calls == ["C01372", "C01373"]
+    assert line_graph_cache._cache_path("C01371").read_bytes() == original
+    assert line_graph_cache.read_graph("C01373") is not None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("lines", ["", "unknown", "2,unknown"])
 async def test_admin_validates_entire_selection_before_updating(admin_client, monkeypatch, lines):
     async def unexpected(*args, **kwargs):

@@ -7,6 +7,7 @@ services:
       dockerfile: Dockerfile
     image: ratp-travaux-backend:latest
     container_name: ratp-backend
+    user: "${BACKEND_UID:-1000}:${BACKEND_GID:-1000}"
     ports:
       - "8000:8000"
     env_file:
@@ -15,7 +16,11 @@ services:
       - PORT=8000
       - LINE_GRAPH_DATA_DIR=/app/data/line_graphs
     volumes:
-      - line-graphs:/app/data/line_graphs
+      - type: bind
+        source: ./line_graphs
+        target: /app/data/line_graphs
+        bind:
+          create_host_path: false
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -38,6 +43,3 @@ services:
       backend:
         condition: service_started
     restart: unless-stopped
-
-volumes:
-  line-graphs:

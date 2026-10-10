@@ -85,13 +85,21 @@ these files: **it never calls Navitia**, even when data is missing or old.
 Reads run outside the event loop, do not wait for an update to finish, and
 observe the latest file on the next request (including across backend workers).
 
-The default directory is
-`$XDG_DATA_HOME/ratp-calendrier-travaux/line_graphs/` (`~/.local/share/` when
-`XDG_DATA_HOME` is unset). Set `LINE_GRAPH_DATA_DIR` to a writable **persistent
+The default directory is `line_graphs/` at the repository root, resolved from
+the backend source location rather than the current working directory.
+Set `LINE_GRAPH_DATA_DIR` to a writable **persistent
 volume** in production. The old `LINE_GRAPH_CACHE_DIR` remains supported as a
 fallback for existing deployments; existing versioned files are compatible.
-Compose already mounts `line-graphs` at `/app/data/line_graphs`, so files survive
-backend container recreation. Do not delete that volume on redeployment.
+Compose bind-mounts the repository's `./line_graphs/` at `/app/data/line_graphs`.
+The backend therefore reads exactly the JSON files generated on the host, rather
+than a separate named volume. Files survive container recreation.
+Create/populate the host directory before starting Compose: it intentionally
+does not create an empty directory when the source path is missing.
+Set `BACKEND_UID` and `BACKEND_GID` to the directory owner's numeric IDs
+(`id -u` and `id -g`; both default to 1000). This lets the non-root backend read
+the private JSON files and write administrative updates to the same directory.
+After switching from the old named volume, recreate the backend container;
+the old volume is not deleted or automatically imported.
 Legacy `static_lines_graph.json` files are no longer read, since their links
 were inferred from schedule-table rows.
 
@@ -115,6 +123,9 @@ curl --fail-with-body --max-time 1800 \
 ```
 
 Line codes are explicit, validated before updating, and deduplicated.
+Use `POST /admin/lines/stations/refresh?lines=all` with the same administration
+header to regenerate every registered line **one at a time**. The public GET
+does not accept `all` and never starts generation.
 Updates are sequential within a batch to limit Navitia load. The request waits
 until each update is built, validated and **successfully written to disk**:
 
@@ -156,7 +167,7 @@ IAM/OIDC authentication can replace the shared secret in a later deployment.
 called `data/`. Before using Cloud Scheduler with Cloud Run, mount a durable,
 shared data source (for example a Cloud Storage volume), configure
 `LINE_GRAPH_DATA_DIR` and verify its atomic-write semantics, or adapt this
-file store to Cloud Storage object writes. The Compose named volume is durable
+file store to Cloud Storage object writes. The Compose host directory is durable
 for the current deployment; the Cloud Run storage integration is not implemented
 by this change.
 
@@ -173,6 +184,14 @@ To prepopulate selected lines before serving the frontend, run
 `uv run python -m scratch.generate_static_graph 2 7 A`.
 Omit line codes to refresh all registered lines. This script uses the same
 builder and permanent file store as the API, not the legacy static-graph algorithm.
+Use `uv run python -m scratch.generate_static_graph --missing-only` to generate
+only missing/invalid graphs without replacing existing valid JSON files.
+Generation continues with the next line after an error and exits unsuccessfully
+with the list of failed lines. Successfully written graphs are preserved so the
+same command can resume work.
+For a full `lines=all` HTTP update, the cumulative time can exceed proxy or
+Scheduler deadlines; prefer this script or individual staggered HTTP calls in
+production. The endpoint is synchronous, not a durable background job.
 
 Only administrative updates require multiple Navitia requests. Visitor loads
 always read the stored files. To run the optional live line-2 and RER-A tests:

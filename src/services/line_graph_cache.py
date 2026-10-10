@@ -11,10 +11,7 @@ from src.domain.line_graph import LineGraph, validate_line_graph
 
 logger = logging.getLogger(__name__)
 GRAPH_CACHE_VERSION = 1
-GRAPH_CACHE_DIR = (
-    Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share")))
-    / "ratp-calendrier-travaux" / "line_graphs"
-)
+GRAPH_CACHE_DIR = Path(__file__).resolve().parents[2] / "line_graphs"
 
 
 def _cache_directory() -> Path:
