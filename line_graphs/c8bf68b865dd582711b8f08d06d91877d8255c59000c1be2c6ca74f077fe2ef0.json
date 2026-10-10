@@ -1,0 +1,232 @@
+{
+    "version": 1,
+    "navitia_id": "C01372",
+    "fetched_at": 1791648466.3658714,
+    "graph": {
+        "stations": {
+            "stop_area:IDFM:474152": {
+                "name": "Porte Dauphine",
+                "lat": 48.870978,
+                "lon": 2.276084,
+                "neighbors": [
+                    "stop_area:IDFM:71315"
+                ]
+            },
+            "stop_area:IDFM:71315": {
+                "name": "Victor Hugo",
+                "lat": 48.869747,
+                "lon": 2.28527,
+                "neighbors": [
+                    "stop_area:IDFM:474152",
+                    "stop_area:IDFM:71347"
+                ]
+            },
+            "stop_area:IDFM:71347": {
+                "name": "Charles de Gaulle - Étoile",
+                "lat": 48.873545,
+                "lon": 2.295586,
+                "neighbors": [
+                    "stop_area:IDFM:71315",
+                    "stop_area:IDFM:71367"
+                ]
+            },
+            "stop_area:IDFM:71367": {
+                "name": "Ternes",
+                "lat": 48.87825,
+                "lon": 2.29814,
+                "neighbors": [
+                    "stop_area:IDFM:71347",
+                    "stop_area:IDFM:71376"
+                ]
+            },
+            "stop_area:IDFM:71376": {
+                "name": "Courcelles",
+                "lat": 48.879161,
+                "lon": 2.3032,
+                "neighbors": [
+                    "stop_area:IDFM:71367",
+                    "stop_area:IDFM:73671"
+                ]
+            },
+            "stop_area:IDFM:71403": {
+                "name": "Villiers",
+                "lat": 48.881522,
+                "lon": 2.315584,
+                "neighbors": [
+                    "stop_area:IDFM:71408",
+                    "stop_area:IDFM:73671"
+                ]
+            },
+            "stop_area:IDFM:71408": {
+                "name": "Rome",
+                "lat": 48.882095,
+                "lon": 2.320704,
+                "neighbors": [
+                    "stop_area:IDFM:71403",
+                    "stop_area:IDFM:71435"
+                ]
+            },
+            "stop_area:IDFM:71409": {
+                "name": "Pigalle",
+                "lat": 48.882354,
+                "lon": 2.337343,
+                "neighbors": [
+                    "stop_area:IDFM:71419",
+                    "stop_area:IDFM:71420"
+                ]
+            },
+            "stop_area:IDFM:71419": {
+                "name": "Anvers",
+                "lat": 48.882868,
+                "lon": 2.344134,
+                "neighbors": [
+                    "stop_area:IDFM:71409",
+                    "stop_area:IDFM:71426"
+                ]
+            },
+            "stop_area:IDFM:71420": {
+                "name": "Blanche",
+                "lat": 48.883524,
+                "lon": 2.33261,
+                "neighbors": [
+                    "stop_area:IDFM:71409",
+                    "stop_area:IDFM:71435"
+                ]
+            },
+            "stop_area:IDFM:71426": {
+                "name": "Barbès - Rochechouart",
+                "lat": 48.883789,
+                "lon": 2.349755,
+                "neighbors": [
+                    "stop_area:IDFM:71419",
+                    "stop_area:IDFM:71434"
+                ]
+            },
+            "stop_area:IDFM:71434": {
+                "name": "La Chapelle",
+                "lat": 48.884441,
+                "lon": 2.360444,
+                "neighbors": [
+                    "stop_area:IDFM:71426",
+                    "stop_area:IDFM:71961"
+                ]
+            },
+            "stop_area:IDFM:71435": {
+                "name": "Place de Clichy",
+                "lat": 48.884036,
+                "lon": 2.328492,
+                "neighbors": [
+                    "stop_area:IDFM:71408",
+                    "stop_area:IDFM:71420"
+                ]
+            },
+            "stop_area:IDFM:71673": {
+                "name": "Nation",
+                "lat": 48.848838,
+                "lon": 2.396333,
+                "neighbors": [
+                    "stop_area:IDFM:71697"
+                ]
+            },
+            "stop_area:IDFM:71697": {
+                "name": "Avron",
+                "lat": 48.851407,
+                "lon": 2.398456,
+                "neighbors": [
+                    "stop_area:IDFM:71673",
+                    "stop_area:IDFM:71728"
+                ]
+            },
+            "stop_area:IDFM:71728": {
+                "name": "Alexandre Dumas",
+                "lat": 48.856211,
+                "lon": 2.394319,
+                "neighbors": [
+                    "stop_area:IDFM:71697",
+                    "stop_area:IDFM:71751"
+                ]
+            },
+            "stop_area:IDFM:71751": {
+                "name": "Philippe Auguste",
+                "lat": 48.858007,
+                "lon": 2.390263,
+                "neighbors": [
+                    "stop_area:IDFM:71728",
+                    "stop_area:IDFM:71787"
+                ]
+            },
+            "stop_area:IDFM:71787": {
+                "name": "Père Lachaise",
+                "lat": 48.862687,
+                "lon": 2.387367,
+                "neighbors": [
+                    "stop_area:IDFM:71751",
+                    "stop_area:IDFM:71815"
+                ]
+            },
+            "stop_area:IDFM:71815": {
+                "name": "Ménilmontant",
+                "lat": 48.866813,
+                "lon": 2.383426,
+                "neighbors": [
+                    "stop_area:IDFM:71787",
+                    "stop_area:IDFM:71834"
+                ]
+            },
+            "stop_area:IDFM:71834": {
+                "name": "Couronnes",
+                "lat": 48.868957,
+                "lon": 2.380586,
+                "neighbors": [
+                    "stop_area:IDFM:71815",
+                    "stop_area:IDFM:71853"
+                ]
+            },
+            "stop_area:IDFM:71853": {
+                "name": "Belleville",
+                "lat": 48.872082,
+                "lon": 2.377072,
+                "neighbors": [
+                    "stop_area:IDFM:71834",
+                    "stop_area:IDFM:71893"
+                ]
+            },
+            "stop_area:IDFM:71893": {
+                "name": "Colonel Fabien",
+                "lat": 48.877789,
+                "lon": 2.370507,
+                "neighbors": [
+                    "stop_area:IDFM:71853",
+                    "stop_area:IDFM:71940"
+                ]
+            },
+            "stop_area:IDFM:71940": {
+                "name": "Jaurès",
+                "lat": 48.882458,
+                "lon": 2.370791,
+                "neighbors": [
+                    "stop_area:IDFM:71893",
+                    "stop_area:IDFM:71961"
+                ]
+            },
+            "stop_area:IDFM:71961": {
+                "name": "Stalingrad",
+                "lat": 48.884062,
+                "lon": 2.366974,
+                "neighbors": [
+                    "stop_area:IDFM:71434",
+                    "stop_area:IDFM:71940"
+                ]
+            },
+            "stop_area:IDFM:73671": {
+                "name": "Monceau",
+                "lat": 48.880458,
+                "lon": 2.308944,
+                "neighbors": [
+                    "stop_area:IDFM:71376",
+                    "stop_area:IDFM:71403"
+                ]
+            }
+        }
+    }
+}
