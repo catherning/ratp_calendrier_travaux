@@ -266,10 +266,10 @@ async def get_lines_stations(
     dependencies=[Depends(require_admin_key)],
 )
 async def update_lines_stations(
-    lines: str = Query(..., description="Explicit line codes to update, e.g. '2,A'"),
+    lines: str = Query(..., description="Line codes to update, e.g. '2,A', or 'all' for every registered line"),
     client: httpx.AsyncClient = Depends(get_client),
 ) -> JSONResponse:
-    codes = _station_line_codes(lines)
+    codes = list(LINE_REGISTRY) if lines.strip() == "all" else _station_line_codes(lines)
     results: dict[str, dict] = {}
     for code in codes:
         try:
